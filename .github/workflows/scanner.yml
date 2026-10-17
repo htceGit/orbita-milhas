@@ -27,9 +27,11 @@ jobs:
           cache: pip
           cache-dependency-path: worker/requirements.txt
       - run: pip install -r worker/requirements.txt
+      - run: python -m playwright install --with-deps chromium
       - name: Consultar tarifas e salvar oportunidades
         env:
           SUPABASE_URL: https://czywkkvwwtcikigbxvty.supabase.co
+          CALENDAR_HEADLESS: 'false'
           FLIGHTS_PROXY: ${{ secrets.FLIGHTS_PROXY }}
           QUERY_BUDGET_OVERRIDE: ${{ github.event.inputs.query_limit || '0' }}
-        run: python -m worker.main
+        run: xvfb-run --auto-servernum python -m worker.main

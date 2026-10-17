@@ -6,9 +6,9 @@ const jwks=createRemoteJWKSet(new URL('https://token.actions.githubusercontent.c
 const base=Deno.env.get('SUPABASE_URL')!+'/rest/v1/';
 const serviceKey=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const response=(value:unknown,status=200)=>new Response(JSON.stringify(value),{status,headers:{'Content-Type':'application/json','Cache-Control':'no-store'}});
-const readTables=new Set(['profiles','scanner_settings','monitors','scanner_state']);
-const writeTables=new Set(['offers','fare_history','scan_runs']);
-const patchTables=new Set(['scan_runs','scanner_state']);
+const readTables=new Set(['profiles','scanner_settings','monitors','scanner_state','calendar_jobs']);
+const writeTables=new Set(['offers','fare_history','scan_runs','calendar_jobs']);
+const patchTables=new Set(['scan_runs','scanner_state','calendar_jobs']);
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const origins=new Set(['CWB','JOI','NVT','FLN','VCP','GRU']);
 
@@ -32,6 +32,7 @@ Deno.serve(async(req:Request)=>{
    query.limit=String(Math.min(1000,Math.max(1,Number(params.limit)||1000)));
    query.offset=String(Math.max(0,Math.floor(Number(params.offset)||0)));
    if(table==='profiles'){query.select='id,plan,pro_until,role';query.status='eq.active';}
+   if(table==='calendar_jobs'){query.status='in.(queued,running)';query.order='created_at.asc';query.limit='10';query.select='id,user_id,request,status';}
    if(table==='monitors'){query.enabled='eq.true';query.order='created_at.asc';}
    if(table==='scanner_state'||table==='scanner_settings')query.id='eq.1';
   }else if(method==='POST'&&writeTables.has(table)){
@@ -43,11 +44,12 @@ Deno.serve(async(req:Request)=>{
    }
   }else if(method==='PATCH'&&patchTables.has(table)){
    const id=String(params.id||'').replace(/^eq\./,'');
-   if(table==='scanner_state'&&id!=='1'||table==='scan_runs'&&!uuid.test(id))return response({error:'Identificador inválido'},400);
+   if(table==='scanner_state'&&id!=='1'||['scan_runs','calendar_jobs'].includes(table)&&!uuid.test(id))return response({error:'Identificador inválido'},400);
    query.id='eq.'+id;
-  }else if(method==='DELETE'&&['offers','fare_history'].includes(table)){
+  }else if(method==='DELETE'&&['offers','fare_history','calendar_jobs'].includes(table)){
    // Retention thresholds are computed here, never accepted from the client.
-   if(table==='fare_history')query.observed_at='lt.'+new Date(Date.now()-90*86400_000).toISOString();
+   if(table==='calendar_jobs')query.created_at='lt.'+new Date(Date.now()-7*86400_000).toISOString();
+   else if(table==='fare_history')query.observed_at='lt.'+new Date(Date.now()-90*86400_000).toISOString();
    else query.return_date='lt.'+new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo'}).format(new Date());
    prefer='return=minimal';
   }else return response({error:'Operação não permitida'},403);

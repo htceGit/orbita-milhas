@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from hashlib import sha256
 from math import gcd
+from itertools import groupby
 import json
 import re
 
@@ -47,6 +48,11 @@ class Planner:
         if any(not re.fullmatch(r'[A-Z]{3}', v) for route in routes for v in route):
             raise ValueError('Código de aeroporto inválido.')
         self.routes = sorted(routes)
+        self.calendar_tasks=[]
+        for (a,b),stays in routes.items():
+            for _,group in groupby(enumerate(sorted(stays)),lambda v:v[1]-v[0]):
+                days=[v[1] for v in group];self.calendar_tasks.append((a,b,min(days),max(days)))
+        self.calendar_tasks.sort(key=lambda v:sha256(':'.join(map(str,v)).encode()).digest())
         self.lanes = [(a,b,n) for (a,b),stays in routes.items() for n in sorted(stays)]
         # Hash ordering distributes all regions and lengths through every batch.
         self.lanes.sort(key=lambda v:sha256(f'{v[0]}:{v[1]}:{v[2]}'.encode()).digest())
@@ -57,7 +63,7 @@ class Planner:
         while gcd(step,self.days)!=1:
             step+=1
         self.step=step
-        self.fingerprint=sha256(json.dumps({'lanes':self.lanes,'months':horizon,'stops':settings['max_stops']},sort_keys=True).encode()).hexdigest()
+        self.fingerprint=sha256(json.dumps({'calendar_plan':'browser-v1','lanes':self.lanes,'months':horizon,'stops':settings['max_stops']},sort_keys=True).encode()).hexdigest()
 
     def at(self,index:int) -> Search:
         index %= self.total

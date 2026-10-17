@@ -18,5 +18,7 @@ jobs:
           python-version: '3.12'
       - run: npm ci --no-audit --no-fund
       - run: npm test
+      - run: pip install -r calendar_service/requirements.txt
+      - run: python -m unittest discover -s calendar_service/tests -v
       - run: npm run test:db
       - run: npm run build

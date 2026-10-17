@@ -57,6 +57,16 @@ assert.equal((await db.query('select airline_names from public.offers')).rows[0]
 await as(admin);
 await assert.rejects(db.query(`insert into public.monitors(user_id,origin,destination) values($1,'CGH','MIA')`,[admin]),/monitors_enabled_origins/);
 await db.exec('reset role');
+const jobParams=JSON.stringify({origin:'GRU',destination:'MIA',departure_start:'2027-01-01',departure_end:'2027-01-15'});
+await db.query(`insert into public.calendar_jobs(user_id,request,cache_key,status) values(null,$1,$2,'completed'),($3,$1,$2,'completed'),($4,$1,$2,'queued')`,[jobParams,'a'.repeat(64),a,b]);
+await assert.rejects(db.query(`insert into public.calendar_jobs(user_id,request,cache_key) values($1,$2,$3)`,[b,jobParams,'a'.repeat(64)]),/calendar_jobs_one_pending/);
+await as(b);
+assert.equal((await db.query('select id from public.calendar_jobs')).rows.length,2,'capturas privadas de outra conta ficam isoladas');
+await assert.rejects(db.query('select entries_gzip from public.calendar_jobs'),/permission denied/,'dados comprimidos acessíveis apenas pela API autenticada');
+await assert.rejects(db.query(`insert into public.calendar_jobs(user_id,request,cache_key) values($1,$2,$3)`,[b,jobParams,'b'.repeat(64)]),/permission denied/,'clientes não podem forjar resultados');
+await as(a);
+assert.equal((await db.query('select id from public.calendar_jobs')).rows.length,0,'contas suspensas perdem acesso aos calendários');
+await db.exec('reset role');
 const rls=await db.query("select tablename from pg_tables where schemaname in ('public','private') and rowsecurity=false");
 assert.equal(rls.rows.length,0,'RLS em todas as tabelas do produto');
 console.log('Banco validado: isolamento, limites Free/Pro, bloqueio de elevação de privilégio, suspensão e acesso administrativo.');

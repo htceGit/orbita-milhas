@@ -4,6 +4,9 @@ import unittest
 from datetime import date,timedelta
 from unittest.mock import patch
 from worker.calendar import CalendarPrice,CalendarUnavailable,parse_calendar,best_candidates
+from calendar_service.domain import CalendarQuery,CalendarCapture
+from calendar_service.jobs import capture_record
+import base64,gzip
 from worker.planner import Search
 from worker.main import run
 
@@ -17,6 +20,8 @@ class CalendarTests(unittest.TestCase):
          ['2026-11-03','2026-11-10',[[None,2500]]],['2026-11-04','2026-11-12',[[None,1000]]],
          ['2026-12-02','2026-12-09',[[None,900]]],['2026-11-05','2026-11-12',[[None,True]]],
          ['2026-11-06','2026-11-13',[[None,0]]]]
+  token=base64.urlsafe_b64encode(b'\x1a\x05\x1a\x03BRL').decode()
+  for cell in cells:cell[2].append(token)
   text=")]}'\n"+json.dumps([['wrb.fr',None,json.dumps([None,cells])]])
   values=parse_calendar(text,'GRU','MIA',start,end,7)
   self.assertEqual([v.price for v in best_candidates(values)],[2500,3000])
@@ -45,17 +50,18 @@ class HybridTests(unittest.TestCase):
   def details(query,*a):calls.append(query);return {'price_brl':3000,'airlines':['AA']}
   self.assertEqual(run(store,search=details,calendar_search=unavailable),0)
   self.assertEqual(store.result['queries_attempted'],5)
-  self.assertEqual(store.result['calendar_queries'],1)
-  self.assertEqual(store.result['detail_queries'],4)
-  self.assertEqual(len(store.saved),4)
+  self.assertEqual(store.result['calendar_search_calls'],3)
+  self.assertEqual(store.result['detail_queries'],2)
+  self.assertEqual(len(store.saved),2)
   self.assertEqual(store.result['calendar_status'],'unavailable')
   self.assertFalse(store.result['coverage_complete'])
   self.assertEqual(store.state['calendar_cursor'],0)
  @patch.dict(os.environ,{'QUERY_DELAY_SECONDS':'0','QUERY_BUDGET_OVERRIDE':'0'})
  def test_calendar_prices_are_not_published_without_details(self):
   store=FakeStore(4);calls=[]
-  def calendar(a,b,start,end,stay,*args):
-   return [CalendarPrice(Search(a,b,start+timedelta(days=i),start+timedelta(days=i+stay)),p) for i,p in enumerate([4000,2000,3000])]
+  def calendar(a,b,start,end,low,high,stops,*args):
+   entries=[CalendarPrice(Search(a,b,start+timedelta(days=i),start+timedelta(days=i+low)),p) for i,p in enumerate([4000,2000,3000])]
+   return CalendarCapture(CalendarQuery(a,b,start,end,low,high,stops),entries,search_calls=1,calendar_requests=1)
   def details(query,*a):calls.append(query);return None
   run(store,search=details,calendar_search=calendar)
   self.assertEqual(store.result['queries_attempted'],4)

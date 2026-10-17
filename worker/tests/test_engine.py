@@ -27,6 +27,8 @@ class PlannerTests(unittest.TestCase):
   m['min_days']=25;m['max_days']=26
   p=Planner(config(),[m],date(2026,10,17))
   self.assertIn(('FLN','MIA',26),p.lanes)
+  self.assertIn(('FLN','MIA',7,20),p.calendar_tasks)
+  self.assertIn(('FLN','MIA',25,26),p.calendar_tasks)
  def test_removed_origins_cannot_reenter_via_monitor(self):
   m={'origin':'IGU','destination':'MIA','min_days':7,'max_days':20,'enabled':True}
   self.assertNotIn(('IGU','MIA'),Planner(config(),[m],date.today()).routes)

@@ -4,3 +4,7 @@ project_id = "orbita-milhas"
 # A própria função verifica assinatura, validade e claims do JWT OIDC GitHub.
 verify_jwt = false
 
+
+[functions.calendar-api]
+# Valida a sessão em Supabase Auth e o perfil ativo no banco.
+verify_jwt = false
