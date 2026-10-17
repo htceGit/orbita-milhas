@@ -90,3 +90,7 @@ Consulte [docs/OPERACAO.md](docs/OPERACAO.md). A estrutura Free/Pro e a lista de
 Para cadastro público comercial, configure SMTP próprio no Supabase. O serviço de e-mail padrão tem limites e restrições de destinatários. Cadastros devem manter confirmação de e-mail. Antes de vender, publique a identificação do operador, contato de privacidade, termos definitivos e política de retenção de dados pessoais.
 
 O GitHub Pages tem restrições ao uso como hospedagem de SaaS comercial. Antes do lançamento comercial, migre o frontend estático para uma hospedagem que permita esse uso; autenticação e dados podem continuar no Supabase. Consulte os [limites oficiais do Pages](https://docs.github.com/en/pages/getting-started-with-github-pages/github-pages-limits).
+
+### Diagnóstico e monitoramento
+
+A Administração oferece monitor de sessões com progresso e eventos atualizados a cada 15 segundos, orçamento real da rodada e cobertura única dos preços de calendário. O worker preserva a classe e a mensagem sanitizada da falha original e distingue timeout, conexão, erro HTTP, formato inválido e resposta sem tarifa válida. Há uma nova tentativa limitada para falhas transitórias; 403, 429 e verificações humanas encerram a sessão. Eventos são exclusivos de administradores ativos e retidos por sete dias. Veja [operação](docs/OPERACAO.md#monitor-de-sessões) e [revisão do motor](docs/DIAGNOSTICO_DO_MOTOR.md).

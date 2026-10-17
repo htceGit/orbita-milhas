@@ -8,7 +8,9 @@ import re
 from worker.planner import Search,ORIGINS,months_after,calendar_calls,CALENDAR_DETAILS_PER_STAY
 
 class CalendarUnavailable(RuntimeError):pass
-class CalendarBlocked(CalendarUnavailable):pass
+class CalendarBlocked(CalendarUnavailable):
+    def __init__(self,message,http_status=None):
+        super().__init__(message);self.status_code=http_status
 
 @dataclass(frozen=True)
 class CalendarQuery:
@@ -65,13 +67,14 @@ class CalendarCapture:
     status:str='completed'
     note:str=''
     collected_at:str=field(default_factory=lambda:datetime.now(timezone.utc).isoformat())
+    diagnostic:dict|None=None
 
     def json(self):
         return {'request':self.request.json(),'status':self.status,'source':'google_flights_calendar','transport':'browser_ui',
             'currency':'BRL','collected_at':self.collected_at,'search_calls':self.search_calls,'calendar_requests':self.calendar_requests,
             'completed_sweeps':self.completed_sweeps,'requested_sweeps':self.request.max_days-self.request.min_days+1,
             'priced_combinations':len(self.entries),'total_combinations':self.request.days*(self.request.max_days-self.request.min_days+1),
-            'note':self.note,'entries':[e.json() for e in sorted(self.entries,key=lambda e:e.price)]}
+            'note':self.note,'diagnostic':self.diagnostic,'entries':[e.json() for e in sorted(self.entries,key=lambda e:e.price)]}
 
 def _bytes_field(data,target):
     pos=0

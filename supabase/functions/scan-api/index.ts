@@ -7,7 +7,7 @@ const base=Deno.env.get('SUPABASE_URL')!+'/rest/v1/';
 const serviceKey=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const response=(value:unknown,status=200)=>new Response(JSON.stringify(value),{status,headers:{'Content-Type':'application/json','Cache-Control':'no-store'}});
 const readTables=new Set(['profiles','scanner_settings','monitors','scanner_state','calendar_jobs','scan_runs']);
-const writeTables=new Set(['offers','fare_history','scan_runs','calendar_jobs']);
+const writeTables=new Set(['offers','fare_history','scan_runs','calendar_jobs','scan_events']);
 const patchTables=new Set(['scan_runs','scanner_state','calendar_jobs']);
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const origins=new Set(['CWB','JOI','NVT','FLN','VCP','GRU']);
@@ -37,7 +37,11 @@ Deno.serve(async(req:Request)=>{
    if(table==='monitors'){query.enabled='eq.true';query.order='created_at.asc';}
    if(table==='scanner_state'||table==='scanner_settings')query.id='eq.1';
   }else if(method==='POST'&&writeTables.has(table)){
-   if(!data||typeof data!=='object'||Array.isArray(data))return response({error:'Dados inválidos'},400);
+   if(table==='scan_events'){
+    const allowed=new Set(['run_id','created_at','stage','outcome','origin','destination','departure_date','return_date','stay_days','attempt','duration_ms','error_code','cause_type','message','http_status','retryable']);
+    if(!Array.isArray(data)||!data.length||data.length>50||data.some(row=>!row||typeof row!=='object'||Object.keys(row).some(k=>!allowed.has(k))||!uuid.test(String(row.run_id))||!['planning','calendar','detail','system'].includes(row.stage)||!['started','success','empty','error','retry','finished'].includes(row.outcome)||row.message&&String(row.message).length>500))return response({error:'Eventos inválidos'},400);
+    prefer='return=minimal';
+   }else if(!data||typeof data!=='object'||Array.isArray(data))return response({error:'Dados inválidos'},400);
    if(table==='offers'){
     if(!origins.has(data.origin)||!/^[A-Z]{3}$/.test(data.destination)||!Number.isFinite(data.price_brl)||data.price_brl<=0||!Array.isArray(data.airlines)||data.airlines.length<1||data.airlines.length>8||data.airlines.some((a:unknown)=>typeof a!=='string'||!/^([A-Z0-9]{2,3}|UNKNOWN)$/.test(a))||!Array.isArray(data.airline_names)||data.airline_names.length<1||data.airline_names.length>8||data.airline_names.some((a:unknown)=>typeof a!=='string'||a.length<1||a.length>150)||data.carrier_validation!=='outbound_only'||!String(data.booking_url).startsWith('https://www.google.com/travel/flights'))return response({error:'Tarifa inválida'},400);
     query.on_conflict='origin,destination,departure_date,return_date';
@@ -47,9 +51,9 @@ Deno.serve(async(req:Request)=>{
    const id=String(params.id||'').replace(/^eq\./,'');
    if(table==='scanner_state'&&id!=='1'||['scan_runs','calendar_jobs'].includes(table)&&!uuid.test(id))return response({error:'Identificador inválido'},400);
    query.id='eq.'+id;
-  }else if(method==='DELETE'&&['offers','fare_history','calendar_jobs'].includes(table)){
+  }else if(method==='DELETE'&&['offers','fare_history','calendar_jobs','scan_events'].includes(table)){
    // Retention thresholds are computed here, never accepted from the client.
-   if(table==='calendar_jobs')query.created_at='lt.'+new Date(Date.now()-7*86400_000).toISOString();
+   if(table==='calendar_jobs'||table==='scan_events')query.created_at='lt.'+new Date(Date.now()-7*86400_000).toISOString();
    else if(table==='fare_history')query.observed_at='lt.'+new Date(Date.now()-90*86400_000).toISOString();
    else query.return_date='lt.'+new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo'}).format(new Date());
    prefer='return=minimal';

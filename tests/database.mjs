@@ -67,6 +67,17 @@ await assert.rejects(db.query(`insert into public.calendar_jobs(user_id,request,
 await as(a);
 assert.equal((await db.query('select id from public.calendar_jobs')).rows.length,0,'contas suspensas perdem acesso aos calendários');
 await db.exec('reset role');
+const scan=(await db.query("insert into public.scan_runs(diagnostics_version,query_budget,phase) values(1,1000,'calendar') returning id")).rows[0].id;
+await db.query("insert into public.scan_events(run_id,stage,outcome,error_code,cause_type,message) values($1,'detail','error','parse_error','IndexError','missing field')",[scan]);
+await as(b);
+assert.equal((await db.query('select id from public.scan_events')).rows.length,0,'diagnósticos ficam restritos à administração');
+await assert.rejects(db.query("insert into public.scan_events(run_id,stage,outcome) values($1,'detail','success')",[scan]),/permission denied/,'membro não forja eventos');
+await as(admin);
+assert.equal((await db.query('select cause_type from public.scan_events')).rows[0].cause_type,'IndexError','admin consulta causa original');
+await assert.rejects(db.exec("update public.scan_events set message='tampered'"),/permission denied/,'admin cliente não altera registros do motor');
+await db.exec('reset role;set role anon');
+await assert.rejects(db.query('select * from public.scan_events'),/permission denied/,'diagnósticos não são públicos');
+await db.exec('reset role');
 const rls=await db.query("select tablename from pg_tables where schemaname in ('public','private') and rowsecurity=false");
 assert.equal(rls.rows.length,0,'RLS em todas as tabelas do produto');
 console.log('Banco validado: isolamento, limites Free/Pro, bloqueio de elevação de privilégio, suspensão e acesso administrativo.');

@@ -1,10 +1,11 @@
 """Detailed Google Flights adapter pinned to fast-flights 3.1.0 (MIT)."""
 from datetime import datetime, timedelta, timezone
 import math
+import re
 from .planner import Search
+from .diagnostics import SearchFailure,diagnose
 
-class ProviderError(RuntimeError):
-    pass
+ProviderError=SearchFailure
 
 AIRLINES = {'LA':'LATAM','AA':'American Airlines','UA':'United Airlines','DL':'Delta Air Lines',
             'TP':'TAP Air Portugal','AF':'Air France','KL':'KLM','IB':'Iberia','BA':'British Airways',
@@ -46,12 +47,37 @@ class FastFlightsProvider:
         self.max_stops=max_stops;self.proxy=proxy
 
     def search(self,query:Search,metadata:dict):
-        from fast_flights import FlightQuery,Passengers,create_query,get_flights,FlightsNotFound
+        from fast_flights import FlightQuery,Passengers,create_query,FlightsNotFound
+        from fast_flights.parser import parse
+        from primp import Client
         q=create_query(flights=[
             FlightQuery(date=query.departure.isoformat(),from_airport=query.origin,to_airport=query.destination),
             FlightQuery(date=query.returning.isoformat(),from_airport=query.destination,to_airport=query.origin)
         ],seat='economy',trip='round-trip',passengers=Passengers(adults=1),currency='BRL',language='pt-BR',max_stops=self.max_stops,hide_separate_and_self_transfer=True)
-        try:results=get_flights(q,proxy=self.proxy)
-        except FlightsNotFound:return None
-        except Exception as exc:raise ProviderError(type(exc).__name__) from None
-        return normalize_cheapest(results,query,metadata,q.url(),airline_metadata=getattr(getattr(results,'metadata',None),'airlines',[]))
+        # Same transport as the pinned library, with explicit deadlines and
+        # response classification before its parser sees the page.
+        try:
+            client=Client(impersonate='chrome_145',impersonate_os='macos',referer=True,
+                proxy=self.proxy,cookie_store=True,timeout=25,connect_timeout=10)
+            response=client.get('https://www.google.com/travel/flights',params=q.params())
+            results=parse_response(response.status_code,response.text,str(response.url),parse,FlightsNotFound)
+            return normalize_cheapest(results,query,metadata,q.url(),airline_metadata=getattr(getattr(results,'metadata',None),'airlines',[]))
+        except SearchFailure:raise
+        except Exception as exc:raise SearchFailure.from_diagnostic(diagnose(exc)) from exc
+
+def parse_response(status,html,url,parser,not_found):
+    if status in (403,429):
+        raise SearchFailure('rate_limited' if status==429 else 'access_denied','HTTPError',f'Google Flights respondeu HTTP {status}.',status)
+    if status>=400:
+        raise SearchFailure('upstream_http','HTTPError',f'Google Flights respondeu HTTP {status}.',status,status in (500,502,503,504))
+    lower=html.lower()
+    if '/sorry/' in url or re.search(r'<iframe[^>]+src=[^>]*google\.com/recaptcha/',lower) or 'unusual traffic from your computer network' in lower:
+        raise SearchFailure('challenge','VerificationRequired','O Google solicitou verificação humana.')
+    if 'consent.google.com' in url:
+        raise SearchFailure('consent_required','ConsentRequired','A resposta direcionou para a página de consentimento.')
+    try:return parser(html)
+    except not_found as exc:
+        raise SearchFailure('upstream_error',type(exc).__name__,'A biblioteca recebeu um erro de pesquisa, sem confirmação de inventário.',retryable=True) from exc
+    except Exception as exc:
+        detail=diagnose(exc);detail['code']='parse_error';detail['retryable']=False
+        raise SearchFailure.from_diagnostic(detail) from exc

@@ -9,6 +9,8 @@ from urllib.parse import parse_qs,urlparse
 import json
 import os
 from .domain import CalendarQuery,CalendarCapture,CalendarUnavailable,CalendarBlocked,parse_calendar
+from worker.diagnostics import diagnose
+from worker.telemetry import TelemetryFailure
 
 
 def calendar_rpc(url):
@@ -60,34 +62,40 @@ class BrowserCalendarEngine:
             if parts.username:options['proxy'].update(username=parts.username,password=parts.password or '')
         self.browser=self.playwright.chromium.launch(**options)
 
-    def capture(self,query:CalendarQuery,max_search_calls=None,proxy=None,timeout_seconds=None):
+    def capture(self,query:CalendarQuery,max_search_calls=None,proxy=None,timeout_seconds=None,progress=None):
         query.validate();self._start(proxy)
         timeout_seconds=timeout_seconds if timeout_seconds is not None else max(240,min(900,query.estimated_calls*8))
         capture=CalendarCapture(query);values={};started=monotonic()
         budget=max_search_calls or query.estimated_calls+2*ceil(query.days/60)
         context=self.browser.new_context(locale='en-US',timezone_id='America/Sao_Paulo',viewport={'width':1280,'height':900})
         page=context.new_page();page.set_default_timeout(20000)
+        current={'origin':query.origin,'destination':query.destination,'min_days':query.min_days,'max_days':query.max_days}
+        def report():
+            if progress:progress({'search_calls':capture.search_calls,'calendar_requests':capture.calendar_requests,'prices':tuple(values.values()),'current':dict(current)})
         def guard():
             if '/sorry/' in page.url or page.locator('iframe[src*="recaptcha"]').count():raise CalendarBlocked('O Google solicitou verificação humana. A captura foi interrompida.')
             if monotonic()-started>timeout_seconds:raise CalendarUnavailable('Limite de tempo da captura atingido.')
             if capture.search_calls>=budget:raise CalendarUnavailable('Orçamento de consultas atingido durante a captura.')
         def step(action,stay):
             guard();capture.search_calls+=1;capture.calendar_requests+=1
+            current['stay_days']=stay;report()
             with page.expect_response(lambda r:calendar_rpc(r.url),timeout=25000) as waiting:action()
             response=waiting.value
-            if response.status in (403,429):raise CalendarBlocked('O Google limitou a captura. Aguarde a próxima rodada.')
+            if response.status in (403,429):raise CalendarBlocked('O Google limitou a captura. Aguarde a próxima rodada.',response.status)
             if response.status!=200:raise CalendarUnavailable(f'Calendário HTTP {response.status}')
             first,last,durations=rpc_range(response.request,query)
             if durations!=[stay,stay]:raise CalendarUnavailable('A duração retornada difere da duração solicitada.')
             for entry in parse_calendar(response.text(),query.origin,query.destination,query.departure_start,query.departure_end,stay):
                 values[entry.query]=entry
+            report()
             return first,last
         try:
             guard();capture.search_calls+=1
+            report()
             # The native graph starts seven days before the selected departure.
             anchor=min(query.departure_start+timedelta(days=7),query.departure_end)
             response=page.goto(search_url(query,anchor),wait_until='domcontentloaded',timeout=45000)
-            if response and response.status in (403,429):raise CalendarBlocked('O Google limitou a página de pesquisa.')
+            if response and response.status in (403,429):raise CalendarBlocked('O Google limitou a página de pesquisa.',response.status)
             guard()
             # SSR buttons can be replaced during hydration. The currency control
             # gets its accessible name after the page is interactive.
@@ -97,8 +105,10 @@ class BrowserCalendarEngine:
             # Reloading each 60-day window is more predictable than the native
             # arrows, which request small, overlapping tails of the chart.
             for index,(window_start,window_end) in enumerate(windows):
+                current.update(departure_start=str(window_start),departure_end=str(window_end))
                 if index:
                     guard();capture.search_calls+=1
+                    report()
                     anchor=min(window_start+timedelta(days=7),window_end)
                     page.goto(search_url(query,anchor),wait_until='domcontentloaded',timeout=45000)
                     page.get_by_role('button',name='Currency BRL',exact=True).wait_for(timeout=25000)
@@ -110,12 +120,13 @@ class BrowserCalendarEngine:
                     if stay==query.min_days:action=lambda:page.get_by_role('button',name='Price graph',exact=True).click()
                     else:action=lambda:page.get_by_role('button',name='Extend your stay by one day',exact=True).click()
                     try:first,last=step(action,stay)
-                    except CalendarBlocked:raise
+                    except (CalendarBlocked,TelemetryFailure):raise
                     except Exception:
                         if retried or budget-capture.search_calls<2:raise
                         # One fresh native page per window, after a pause. A
                         # repeated failure remains partial; no retry loop.
                         retried=True;sleep(3);guard();capture.search_calls+=1
+                        report()
                         page.goto(search_url(replace(query,min_days=stay,max_days=stay),anchor),wait_until='domcontentloaded',timeout=45000)
                         page.get_by_role('button',name='Currency BRL',exact=True).wait_for(timeout=25000)
                         try:page.wait_for_load_state('networkidle',timeout=10000)
@@ -126,11 +137,13 @@ class BrowserCalendarEngine:
                     finished[stay]+=1
                     capture.completed_sweeps=sum(count==len(windows) for count in finished.values())
                     sleep(float(os.environ.get('CALENDAR_DELAY_SECONDS','2')))
+        except TelemetryFailure:raise
         except Exception as exc:
             capture.status='partial' if values else 'failed'
+            capture.diagnostic=diagnose(exc)
             capture.note=str(exc) if isinstance(exc,CalendarUnavailable) else f'Falha de captura: {type(exc).__name__}'
             if not values:
-                error=(CalendarBlocked if isinstance(exc,CalendarBlocked) else CalendarUnavailable)(capture.note);error.search_calls=capture.search_calls;raise error from None
+                error=(CalendarBlocked if isinstance(exc,CalendarBlocked) else CalendarUnavailable)(capture.note);error.search_calls=capture.search_calls;error.diagnostic=capture.diagnostic;raise error from exc
         finally:context.close()
         capture.entries=list(values.values())
         return capture

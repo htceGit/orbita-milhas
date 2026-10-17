@@ -62,6 +62,7 @@ class Planner:
         self.today = today
         self.days = (months_after(today,horizon)-today).days
         self.total = len(self.lanes)*self.days
+        self._lane_set=set(self.lanes)
         step=max(1,int(self.days*.618))
         while gcd(step,self.days)!=1:
             step+=1
@@ -90,4 +91,7 @@ class Planner:
         a,b,stay=self.lanes[lane_index]
         departure=self.today+timedelta(days=departure_offset)
         return Search(a,b,departure,departure+timedelta(days=stay))
+
+    def contains(self,query:Search) -> bool:
+        return (query.origin,query.destination,(query.returning-query.departure).days) in self._lane_set and self.today<query.departure<=self.today+timedelta(days=self.days)
 
