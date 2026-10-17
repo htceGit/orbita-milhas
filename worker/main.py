@@ -70,18 +70,22 @@ def run(store,search=bounded_search,clock=monotonic,calendar_search=None):
         calendar_search=lambda a,b,start,end,low,high,stops,proxy,max_calls:engine.capture(CalendarQuery(a,b,start,end,low,high,stops),max_search_calls=max_calls,proxy=proxy,progress=capture_progress)
     workflow_id=os.environ.get('GITHUB_RUN_ID','')
     workflow_url=f'https://github.com/htceGit/orbita-milhas/actions/runs/{workflow_id}' if workflow_id.isdigit() else None
+    trigger=os.environ.get('SCAN_TRIGGER_SOURCE','manual')
+    if trigger not in ('manual','schedule','continuation'):trigger='manual'
     run=store.request('scan_runs','POST',{'total_combinations':planner.total,'provider':'orbita_browser_calendar' if calendar_active else 'fast_flights','message':'Calendário para descobrir datas; consulta detalhada para confirmar tarifa e companhia.',
-        'diagnostics_version':1,'query_budget':budget,'phase':'planning','workflow_url':workflow_url,'heartbeat_at':datetime.now(timezone.utc).isoformat()})[0]
+        'diagnostics_version':1,'query_budget':budget,'query_budget_override':override if override>0 else None,'trigger_source':trigger,'phase':'planning','workflow_url':workflow_url,'heartbeat_at':datetime.now(timezone.utc).isoformat()})[0]
     attempts=found=errors=consecutive=calendar_queries=calendar_entries=detail_queries=calendar_search_calls=calendar_routes=calendar_errors=0
     calendar_status='pending' if calendar_active else 'disabled'
     checked=set();started=clock();reason='';seen=set();calendar_partial=False;pending_candidates=[];pending_stops={}
     calendar_tasks_attempted=fallback_tasks_attempted=0;planned_stop=False
     retries=empty_results=recovered=final_errors=0;priced=set();phase='planning';current=None;last_cursor_write=-100
+    sweeps_requested=sweeps_completed=0
     reporter=SessionReporter(store,run['id'],clock)
     proxy=os.environ.get('FLIGHTS_PROXY') or None
     def metrics():
         return {'queries_attempted':attempts,'offers_found':found,'errors_count':errors,
                 'calendar_queries':calendar_queries,'calendar_entries':calendar_entries,
+                'calendar_sweeps_requested':sweeps_requested,'calendar_sweeps_completed':sweeps_completed,
                 'calendar_search_calls':calendar_search_calls,'calendar_routes':calendar_routes,'detail_queries':detail_queries,'detail_dates_checked':len(checked),'calendar_status':calendar_status,
                 'retries_count':retries,'empty_results':empty_results,'recovered_queries':recovered,'calendar_priced_combinations':len(priced)}
     def checkpoint(force=False):
@@ -95,6 +99,7 @@ def run(store,search=bounded_search,clock=monotonic,calendar_search=None):
     def capture_progress(progress):
         live=metrics();prices={v.query for v in progress['prices'] if planner.contains(v.query)}
         live.update(queries_attempted=attempts+progress['search_calls'],calendar_search_calls=calendar_search_calls+progress['search_calls'],
+            calendar_sweeps_requested=sweeps_requested+progress.get('requested_sweeps',0),calendar_sweeps_completed=sweeps_completed+progress.get('completed_sweeps',0),
             calendar_queries=calendar_queries+progress['calendar_requests'],calendar_entries=calendar_entries+len(progress['prices']),calendar_priced_combinations=len(priced|prices))
         reporter.publish(live,'calendar',progress['current'])
     try:
@@ -104,6 +109,7 @@ def run(store,search=bounded_search,clock=monotonic,calendar_search=None):
             phase='calendar'
             queued=process_queued(store,engine,run['id'],budget,proxy,progress=capture_progress)
             attempts+=queued['search_calls'];calendar_search_calls+=queued['search_calls'];calendar_queries+=queued['calendars'];calendar_entries+=queued['entries'];calendar_routes+=queued['routes'];errors+=queued['errors']
+            sweeps_requested+=queued.get('sweeps_requested',0);sweeps_completed+=queued.get('sweeps_completed',0)
             if queued['routes']:calendar_status='available'
             calendar_partial=bool(queued['errors']);pending_candidates=queued['candidates'];pending_stops=queued['candidate_stops']
             for capture in queued.get('captures',[]):priced.update(v.query for v in capture.entries if planner.contains(v.query))
@@ -131,6 +137,7 @@ def run(store,search=bounded_search,clock=monotonic,calendar_search=None):
                 except TelemetryFailure:raise
                 except Exception as exc:
                     used=max(1,getattr(exc,'search_calls',0));attempts+=used;calendar_search_calls+=used
+                    calendar_queries+=getattr(exc,'calendar_requests',0)
                     errors+=1;calendar_errors+=1;calendar_status='unavailable';calendar_partial=True
                     calendar_active=calendar_errors<3 and not isinstance(exc,CalendarBlocked)
                     diagnostic=diagnose(exc);reporter.event('calendar','error',diagnostic=diagnostic,duration_ms=(clock()-call_started)*1000,context=current)
@@ -138,6 +145,7 @@ def run(store,search=bounded_search,clock=monotonic,calendar_search=None):
                     if diagnostic['code'] in ('rate_limited','access_denied','challenge'):reason='Sessão interrompida por limitação ou verificação de acesso do Google.'
                 else:
                     attempts+=capture.search_calls;calendar_search_calls+=capture.search_calls;calendar_queries+=capture.calendar_requests
+                    sweeps_completed+=capture.completed_sweeps
                     calendar_entries+=len(capture.entries);calendar_routes+=1;calendar_status='available';calendar_errors=0
                     if capture.status!='completed':errors+=1;calendar_partial=True
                     priced.update(v.query for v in capture.entries if planner.contains(v.query))
@@ -148,6 +156,7 @@ def run(store,search=bounded_search,clock=monotonic,calendar_search=None):
                     candidates=[v.query for v in best_candidates_per_stay(capture.entries)]
                     print(f'Calendário {task[0]}–{task[1]} ({task[2]}–{task[3]} dias): {len(capture.entries)} preços; {capture.search_calls} chamadas; {len(candidates)} datas selecionadas; {capture.status}.',flush=True)
                 task_count=task[3]-task[2]+1
+                sweeps_requested+=task_count
                 calendar_tasks_attempted+=task_count
                 calendar_cursor=(calendar_cursor+task_count)%len(planner.calendar_tasks)
                 checkpoint(True)

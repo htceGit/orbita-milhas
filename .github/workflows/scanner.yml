@@ -59,7 +59,7 @@ jobs:
   continue:
     name: Próxima sessão após pausa de 15 minutos
     needs: scan
-    if: always() && (github.event.inputs.query_limit || '0') == '0' && github.event.inputs.mode != 'once'
+    if: ${{ !cancelled() && (github.event.inputs.query_limit || '0') == '0' && github.event.inputs.mode != 'once' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment: scanner-pause-15m

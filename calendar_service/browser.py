@@ -77,7 +77,7 @@ class BrowserCalendarEngine:
         page=context.new_page();page.set_default_timeout(20000)
         current={'origin':query.origin,'destination':query.destination,'min_days':query.min_days,'max_days':query.max_days}
         def report():
-            if progress:progress({'search_calls':capture.search_calls,'calendar_requests':capture.calendar_requests,'prices':tuple(values.values()),'current':dict(current)})
+            if progress:progress({'search_calls':capture.search_calls,'calendar_requests':capture.calendar_requests,'requested_sweeps':query.max_days-query.min_days+1,'completed_sweeps':capture.completed_sweeps,'prices':tuple(values.values()),'current':dict(current)})
         def guard():
             if 'consent.google.com' in page.url:raise SearchFailure('consent_required','ConsentRequired','A pesquisa direcionou para uma página de consentimento.')
             if '/sorry/' in page.url or page.locator('iframe[src*="recaptcha"]').count():raise CalendarBlocked('O Google solicitou verificação humana. A captura foi interrompida.')
@@ -143,6 +143,7 @@ class BrowserCalendarEngine:
                     if first>window_start or last<window_end:raise CalendarUnavailable('A janela retornada não cobre as datas solicitadas.')
                     finished[stay]+=1
                     capture.completed_sweeps=sum(count==len(windows) for count in finished.values())
+                    report()
                     sleep(float(os.environ.get('CALENDAR_DELAY_SECONDS','2')))
         except TelemetryFailure:raise
         except Exception as exc:
@@ -150,7 +151,7 @@ class BrowserCalendarEngine:
             capture.diagnostic=diagnose(exc)
             capture.note=str(exc) if isinstance(exc,CalendarUnavailable) else f'Falha de captura: {type(exc).__name__}'
             if not values:
-                error=(CalendarBlocked if isinstance(exc,CalendarBlocked) else CalendarUnavailable)(capture.note);error.search_calls=capture.search_calls;error.diagnostic=capture.diagnostic;raise error from exc
+                error=(CalendarBlocked if isinstance(exc,CalendarBlocked) else CalendarUnavailable)(capture.note);error.search_calls=capture.search_calls;error.calendar_requests=capture.calendar_requests;error.diagnostic=capture.diagnostic;raise error from exc
         finally:context.close()
         capture.entries=list(values.values())
         return capture

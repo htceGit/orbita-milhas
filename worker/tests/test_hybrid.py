@@ -62,6 +62,25 @@ class FakeStore:
 
 class HybridTests(unittest.TestCase):
  @patch.dict(os.environ,{'QUERY_DELAY_SECONDS':'0','QUERY_BUDGET_OVERRIDE':'0'})
+ def test_requests_and_complete_sweeps_are_independent(self):
+  store=FakeStore(10);store.settings['max_days']=8
+  def calendar(a,b,start,end,low,high,stops,*args):
+   return CalendarCapture(CalendarQuery(a,b,start,end,low,high,stops),[],search_calls=3,calendar_requests=2,completed_sweeps=2)
+  run(store,search=lambda *args:None,calendar_search=calendar)
+  self.assertEqual(store.result['calendar_queries'],2)
+  self.assertEqual(store.result['calendar_sweeps_requested'],2)
+  self.assertEqual(store.result['calendar_sweeps_completed'],2)
+ @patch.dict(os.environ,{'QUERY_DELAY_SECONDS':'0','QUERY_BUDGET_OVERRIDE':'0'})
+ def test_failed_capture_keeps_attempted_request_count(self):
+  store=FakeStore(9)
+  def calendar(*args):
+   exc=CalendarUnavailable('Timeout');exc.search_calls=3;exc.calendar_requests=2
+   raise exc
+  run(store,search=lambda *args:None,calendar_search=calendar)
+  self.assertEqual(store.result['calendar_queries'],2)
+  self.assertEqual(store.result['calendar_sweeps_requested'],1)
+  self.assertEqual(store.result['calendar_sweeps_completed'],0)
+ @patch.dict(os.environ,{'QUERY_DELAY_SECONDS':'0','QUERY_BUDGET_OVERRIDE':'0'})
  def test_rpc_failure_falls_back_and_preserves_budget(self):
   store=FakeStore(9);calls=[]
   def unavailable(*a):raise CalendarUnavailable('RPC')
