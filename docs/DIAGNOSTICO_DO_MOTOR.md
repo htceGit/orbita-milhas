@@ -6,12 +6,15 @@ Na sessão `7f49c900-fd26-4643-831b-4242ec9751f6`, CWB → MCO, o calendário tr
 
 A repetição local de CWB → MCO, 11–18/03/2027, retornou quatro opções pela biblioteca original. Isso demonstra comportamento intermitente nessa consulta, sem provar a causa anterior. O transporte controlado novo também retornou uma tarifa em teste real GRU → MIA, 21/11–05/12/2026. Um resultado isolado não comprova estabilidade geral.
 
+Na primeira validação do novo diagnóstico no Actions (`39072643010`), o calendário preservou 360 preços antes de um `TimeoutError` ao abrir o botão `Price graph`; duas consultas detalhadas registraram `IndexError` e outra registrou `FlightsNotFound`. Isso confirma problemas de interpretação e espera nessa amostra, sem evidência de HTTP 403/429. O teste também detectou um lote de eventos com campos heterogêneos recusado pelo banco. O envio foi padronizado e recebeu teste de regressão; o encerramento da sessão é tentado mesmo quando os eventos não podem ser gravados.
+
 ## Mudanças implementadas
 
 - Preservação da causa ao atravessar o subprocesso: código, classe original, mensagem sanitizada, status HTTP e possibilidade de nova tentativa.
 - Inspeção da resposta HTTP e identificação de recusa, limite e verificação humana antes do parser. O erro da biblioteca na resposta de pesquisa é separado de uma lista vazia válida.
 - Timeout explícito do transporte, limite externo por processo e uma única repetição de falhas transitórias, contabilizada no orçamento e respeitando a reserva para as demais datas.
 - Bloqueio explícito encerra a sessão inteira, inclusive na fila administrativa; falhas de banco e telemetria interrompem como infraestrutura.
+- Reconciliação de sessões sem encerramento: a próxima verificação consulta a execução exata no GitHub e só fecha o registro após confirmar o término, preservando a pausa mínima e os últimos contadores salvos.
 - Progresso durante a captura de calendário, eventos administrativos em lotes, cursor salvo periodicamente e painel de sessões.
 - Cobertura calculada por pares únicos com preço capturado; consumo de chamadas e validação detalhada têm contadores próprios.
 
@@ -20,7 +23,7 @@ A repetição local de CWB → MCO, 11–18/03/2027, retornou quatro opções pe
 1. Medir uma sequência de sessões com o novo diagnóstico antes de mudar frequência ou orçamento. Comparar sucesso de detalhe, tempo por etapa, causas, recuperação e cobertura única por chamada. Sessões antigas não permitem reconstruir esses indicadores por causa.
 2. Se predominarem erros de formato, adaptar o parser usando respostas de teste sanitizadas e testes de contrato. A integração permanece não oficial e sua estrutura pode mudar. Não armazenar respostas integrais de usuários.
 3. Persistir as datas selecionadas ainda não detalhadas em uma fila própria. Hoje interrupções abruptas podem perder o restante dos candidatos do lote, apesar do cursor salvo. Isso exige deduplicação, expiração e testes de retomada.
-4. Reconciliar encerramentos abruptos com o estado do GitHub para marcar sessões órfãs. O painel já sinaliza ausência de atualização; o gate permite recuperação após quatro horas.
+4. Ampliar a reconciliação já implementada com testes de cancelamento e indisponibilidade prolongada. Quando o GitHub não confirma o encerramento, o gate mantém o bloqueio conservador e só permite a recuperação antiga após quatro horas.
 5. Após obter amostra confiável, ajustar intervalo e política de repetição conforme as causas observadas. Não repetir automaticamente respostas de bloqueio nem introduzir serviços pagos sem decisão do operador.
 
 O número de preços de calendário não garante disponibilidade de itinerário, companhia específica ou resgate LATAM Pass. A consulta detalhada continua necessária antes da publicação de uma oferta.

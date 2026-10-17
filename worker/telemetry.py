@@ -11,6 +11,9 @@ class SessionReporter:
         self.events=[];self.last_write=-100;self.phase=None;self.error_counts={};self.last_error=None
     def event(self,stage,outcome,query=None,diagnostic=None,attempt=1,duration_ms=None,message=None,context=None):
         row={'run_id':self.run_id,'stage':stage,'outcome':outcome,'attempt':attempt,'created_at':datetime.now(timezone.utc).isoformat()}
+        # PostgREST bulk inserts require exactly the same keys in every row.
+        row.update({key:None for key in ('origin','destination','departure_date','return_date','stay_days','duration_ms','error_code','cause_type','message','http_status')})
+        row['retryable']=False
         if query:
             row.update(origin=query.origin,destination=query.destination,departure_date=str(query.departure),return_date=str(query.returning),stay_days=(query.returning-query.departure).days)
         elif context:

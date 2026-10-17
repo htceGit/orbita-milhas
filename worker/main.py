@@ -210,8 +210,12 @@ def run(store,search=bounded_search,clock=monotonic,calendar_search=None):
         print(f'Rodada {status}: {calendar_queries} calendários, {calendar_entries} preços de calendário, {detail_queries} consultas detalhadas, {found} tarifas.',flush=True)
         return 1 if status=='failed' else 0
     except Exception as exc:
-        reporter.event('system','error',diagnostic=diagnose(exc));reporter.flush_events()
-        store.patch('scan_runs',run['id'],{**metrics(),'status':'failed','phase':'failed','heartbeat_at':datetime.now(timezone.utc).isoformat(),'error_counts':reporter.error_counts,'last_error':reporter.last_error,'finished_at':datetime.now(timezone.utc).isoformat(),'message':f'Falha de infraestrutura: {type(exc).__name__}'})
+        try:reporter.event('system','error',diagnostic=diagnose(exc));reporter.flush_events()
+        except TelemetryFailure:pass
+        # Event storage can fail while the run summary is still writable.
+        # Always attempt to close the run so a log failure cannot strand it.
+        try:store.patch('scan_runs',run['id'],{**metrics(),'status':'failed','phase':'failed','heartbeat_at':datetime.now(timezone.utc).isoformat(),'error_counts':reporter.error_counts,'last_error':reporter.last_error,'finished_at':datetime.now(timezone.utc).isoformat(),'message':f'Falha de infraestrutura: {type(exc).__name__}'})
+        except Exception:print('Não foi possível persistir o encerramento; confira esta execução no GitHub Actions.',flush=True)
         raise
     finally:
         if engine:engine.close()

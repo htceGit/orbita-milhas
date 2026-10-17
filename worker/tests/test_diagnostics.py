@@ -3,7 +3,7 @@ from unittest.mock import patch
 from worker.diagnostics import SearchFailure,diagnose,safe_message
 from worker.main import child_search,run
 from worker.provider import parse_response
-from worker.telemetry import TelemetryFailure
+from worker.telemetry import TelemetryFailure,SessionReporter
 from calendar_service.browser import ensure_calendar_response
 from types import SimpleNamespace
 from calendar_service.domain import CalendarQuery,CalendarCapture,CalendarPrice,CalendarBlocked
@@ -52,6 +52,30 @@ class DiagnosticTests(unittest.TestCase):
   self.assertEqual(context.exception.cause_type,'IndexError');self.assertFalse(context.exception.retryable)
 
 class RecoveryTests(unittest.TestCase):
+ def test_mixed_events_have_identical_keys_for_postgrest_bulk_insert(self):
+  class Store:
+   def request(self,table,method,data,**kwargs):
+    self.rows=list(data)
+    assert all(set(row)==set(data[0]) for row in data),'PostgREST rejects heterogeneous keys'
+  store=Store();reporter=SessionReporter(store,'run')
+  reporter.event('planning','started',message='Starting')
+  reporter.event('detail','error',Search('GRU','MIA',date(2026,11,1),date(2026,11,8)),diagnose(IndexError('Missing field')))
+  reporter.event('detail','empty',message='No valid fare')
+  reporter.flush_events()
+  self.assertEqual(len(store.rows),3)
+  self.assertFalse(store.rows[0]['retryable'])
+  self.assertIsNone(store.rows[0]['error_code'])
+ @patch.dict('os.environ',{'QUERY_BUDGET_OVERRIDE':'0'})
+ def test_event_persistence_failure_still_closes_run(self):
+  class Store(FakeStore):
+   def request(self,table,method='GET',data=None,**kwargs):
+    if table=='scan_events' and method=='POST':raise RuntimeError('Event storage unavailable')
+    return super().request(table,method,data,**kwargs)
+  store=Store(10)
+  with self.assertRaises(TelemetryFailure):run(store,calendar_search=lambda *args:None)
+  self.assertEqual(store.result['status'],'failed')
+  self.assertEqual(store.result['phase'],'failed')
+  self.assertIsNotNone(store.result['finished_at'])
  @patch.dict('os.environ',{'QUERY_DELAY_SECONDS':'0','RETRY_DELAY_SECONDS':'0','QUERY_BUDGET_OVERRIDE':'0'})
  def test_retry_does_not_spend_reserved_second_candidate_call(self):
   store=FakeStore(4);calls=[]

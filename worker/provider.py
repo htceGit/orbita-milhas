@@ -2,6 +2,7 @@
 from datetime import datetime, timedelta, timezone
 import math
 import re
+import traceback
 from .planner import Search
 from .diagnostics import SearchFailure,diagnose
 
@@ -80,4 +81,6 @@ def parse_response(status,html,url,parser,not_found):
         raise SearchFailure('upstream_error',type(exc).__name__,'A biblioteca recebeu um erro de pesquisa, sem confirmação de inventário.',retryable=True) from exc
     except Exception as exc:
         detail=diagnose(exc);detail['code']='parse_error';detail['retryable']=False
+        frame=next((frame for frame in reversed(traceback.extract_tb(exc.__traceback__)) if frame.filename.replace('\\','/').endswith('/fast_flights/parser.py')),None)
+        if frame:detail['message']+=f' [fast_flights.parser.{frame.name}:{frame.lineno}]'
         raise SearchFailure.from_diagnostic(detail) from exc
