@@ -62,6 +62,23 @@ class FakeStore:
 
 class HybridTests(unittest.TestCase):
  @patch.dict(os.environ,{'QUERY_DELAY_SECONDS':'0','QUERY_BUDGET_OVERRIDE':'0'})
+ def test_expensive_fare_is_filtered_before_saving_and_is_not_a_search_failure(self):
+  store=FakeStore(2);store.settings['search_strategy']='detailed'
+  prices=iter([3000.01,3000]);events=[];request=store.request
+  def capture(table,method='GET',data=None,**kwargs):
+   if table=='scan_events' and method=='POST':events.extend(data)
+   return request(table,method,data,**kwargs)
+  store.request=capture
+  run(store,search=lambda *a:{'price_brl':next(prices),'airlines':['LA']},calendar_search=lambda *a:None)
+  self.assertEqual(len(store.saved),1)
+  self.assertEqual(store.result['offers_found'],1)
+  self.assertEqual(store.result['offers_price_filtered'],1)
+  self.assertEqual(store.result['detail_dates_checked'],2)
+  self.assertEqual(store.result['empty_results'],0)
+  self.assertEqual(store.result['errors_count'],0)
+  self.assertEqual([e['outcome'] for e in events if e['stage']=='detail'],['filtered','success'])
+
+ @patch.dict(os.environ,{'QUERY_DELAY_SECONDS':'0','QUERY_BUDGET_OVERRIDE':'0'})
  def test_requests_and_complete_sweeps_are_independent(self):
   store=FakeStore(10);store.settings['max_days']=8
   def calendar(a,b,start,end,low,high,stops,*args):

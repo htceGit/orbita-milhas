@@ -1,0 +1,14 @@
+{
+  "caps": {"EUA": 3000, "Europa": 3500},
+  "destination_regions": {
+    "MIA": "EUA", "JFK": "EUA", "LAX": "EUA", "MCO": "EUA", "BOS": "EUA",
+    "LIS": "Europa", "MAD": "Europa", "BCN": "Europa", "CDG": "Europa",
+    "LHR": "Europa", "FCO": "Europa", "MXP": "Europa", "FRA": "Europa"
+  },
+  "country_regions": {
+    "estados unidos": "EUA", "united states": "EUA", "us": "EUA", "usa": "EUA",
+    "portugal": "Europa", "espanha": "Europa", "frança": "Europa",
+    "reino unido": "Europa", "itália": "Europa", "alemanha": "Europa"
+  },
+  "region_names": {"eua": "EUA", "europa": "Europa"}
+}

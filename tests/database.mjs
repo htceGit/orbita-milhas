@@ -11,7 +11,23 @@ await db.exec(`
  grant execute on function auth.uid() to anon,authenticated,service_role;
 `);
 const files=(await readdir('supabase/migrations')).filter(f=>f.endsWith('.sql')).sort();
-for(const f of files)await db.exec(await readFile('supabase/migrations/'+f,'utf8'));
+for(const f of files){
+ if(f.endsWith('_enforce_offer_fare_caps.sql')){
+  await db.exec(`insert into public.offers(origin,destination,city,country,region,departure_date,return_date,price_brl,airlines,airline_names,booking_url,carrier_validation) values
+   ('GRU','MIA','Miami','Estados Unidos','EUA','2027-02-01','2027-02-15',3000.01,array['LA'],array['LATAM'],'https://www.google.com/travel/flights','outbound_only'),
+   ('GRU','LIS','Lisboa','Portugal','Europa','2027-02-01','2027-02-15',3500.01,array['TP'],array['TAP'],'https://www.google.com/travel/flights','outbound_only');
+   insert into public.fare_history(offer_id,price_brl) select id,price_brl from public.offers;`);
+ }
+ await db.exec(await readFile('supabase/migrations/'+f,'utf8'));
+}
+assert.equal((await db.query('select count(*)::int n from public.offers where expires_at>now()')).rows[0].n,0,'ofertas legadas acima do teto são expiradas');
+assert.equal((await db.query('select count(*)::int n from public.fare_history')).rows[0].n,2,'histórico de preços preservado');
+await assert.rejects(db.exec("update public.offers set expires_at=now()+interval '8 hours'"),/Tarifa acima do teto/,'ofertas antigas não podem ser republicadas acima do teto');
+await db.exec('delete from public.offers');
+const farePolicy=JSON.parse(await readFile('fare-policy.json','utf8'));
+for(const [destination,region] of Object.entries(farePolicy.destination_regions))assert.equal(Number((await db.query('select private.offer_fare_cap($1,$2,$3) cap',[destination,'',''])).rows[0].cap),farePolicy.caps[region]);
+for(const [country,region] of Object.entries(farePolicy.country_regions))assert.equal(Number((await db.query('select private.offer_fare_cap($1,$2,$3) cap',['ZZZ',country,''])).rows[0].cap),farePolicy.caps[region]);
+for(const [region,label] of Object.entries(farePolicy.region_names))assert.equal(Number((await db.query('select private.offer_fare_cap($1,$2,$3) cap',['ZZZ','',region])).rows[0].cap),farePolicy.caps[label]);
 const a='10000000-0000-4000-8000-000000000001',b='10000000-0000-4000-8000-000000000002',admin='10000000-0000-4000-8000-000000000003';
 await db.query(`insert into auth.users(id,email,raw_user_meta_data) values($1,'a@example.test','{"full_name":"A","role":"admin","plan":"pro"}'),($2,'b@example.test','{}'),($3,'admin@example.test','{}')`,[a,b,admin]);
 await db.query(`update public.profiles set role='admin' where id=$1`,[admin]);
@@ -52,8 +68,14 @@ assert.equal((await db.query('select role from public.profiles where id=$1',[res
 const allowedOrigins=['CWB','JOI','NVT','FLN','VCP','GRU'];
 assert.deepEqual((await db.query('select origins from public.scanner_settings')).rows[0].origins,allowedOrigins);
 await assert.rejects(db.exec("update public.scanner_settings set origins=array['CGH']"),/scanner_origins_allowed/);
-await db.exec(`insert into public.offers(origin,destination,city,country,region,departure_date,return_date,price_brl,airlines,airline_names,booking_url,carrier_validation) values('GRU','MIA','Miami','Estados Unidos','EUA','2027-01-01','2027-01-15',3500,array['AV'],array['Avianca'],'https://www.google.com/travel/flights','outbound_only')`);
+await db.exec(`insert into public.offers(origin,destination,city,country,region,departure_date,return_date,price_brl,airlines,airline_names,booking_url,carrier_validation) values('GRU','MIA','Miami','Estados Unidos','EUA','2027-01-01','2027-01-15',3000,array['AV'],array['Avianca'],'https://www.google.com/travel/flights','outbound_only')`);
 assert.equal((await db.query('select airline_names from public.offers')).rows[0].airline_names[0],'Avianca');
+await db.exec('set role service_role');
+await assert.rejects(db.exec("update public.offers set price_brl=3000.01"),/Tarifa acima do teto/,'até o servidor não pode atualizar oferta acima do teto');
+for(const [destination,country,region,price] of [['JFK','Estados Unidos','EUA',3000.01],['SFO','Estados Unidos','EUA',4000],['LIS','Portugal','Europa',3500.01]])await assert.rejects(db.query(`insert into public.offers(origin,destination,city,country,region,departure_date,return_date,price_brl,airlines,airline_names,booking_url,carrier_validation) values('GRU',$1,'Destino',$2,$3,'2027-01-01','2027-01-15',$4,array['LA'],array['LATAM'],'https://www.google.com/travel/flights','outbound_only')`,[destination,country,region,price]),/Tarifa acima do teto/,'LATAM também obedece ao teto no banco');
+await db.exec(`insert into public.offers(origin,destination,city,country,region,departure_date,return_date,price_brl,airlines,airline_names,booking_url,carrier_validation) values('GRU','LIS','Lisboa','Portugal','Europa','2027-01-01','2027-01-15',3500,array['TP'],array['TAP'],'https://www.google.com/travel/flights','outbound_only')`);
+await db.exec('reset role');
+
 await as(admin);
 await assert.rejects(db.query(`insert into public.monitors(user_id,origin,destination) values($1,'CGH','MIA')`,[admin]),/monitors_enabled_origins/);
 await db.exec('reset role');

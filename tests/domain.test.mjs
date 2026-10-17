@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {estimate,filterOffers,escape,hasLatamProjection,airlineLabel,origins,calendarCandidates} from '../web/domain.js';
+import {estimate,filterOffers,escape,hasLatamProjection,airlineLabel,origins,calendarCandidates,fareCap,offerAllowed,demoOffers} from '../web/domain.js';
 test('a simulação inclui custo das milhas e taxas, sem inventar uma cotação',()=>{
  const s=estimate(4000,20,350);
  assert.equal(s.low,2800);assert.equal(s.high,3000);
@@ -19,9 +19,22 @@ test('a seleção de calendário mantém duas datas distintas por permanência',
  assert.equal(selected[0].price_brl,3840);
 });
 test('filtros combinam região, origem, destino, preço e intervalo inclusivo',()=>{
- const offers=[{region:'Europa',origin:'FLN',city:'Paris',country:'França',destination:'CDG',price_brl:4000,departure_date:'2027-01-01'},{region:'EUA',origin:'GRU',city:'Miami',country:'Estados Unidos',destination:'MIA',price_brl:3000,departure_date:'2027-02-01'}];
- assert.equal(filterOffers(offers,{region:'Europa',origin:'FLN',search:'cdg',maxPrice:4000,departureFrom:'2027-01-01',departureTo:'2027-01-01'}).length,1);
- assert.equal(filterOffers(offers,{region:'Europa',maxPrice:3999}).length,0);
+ const offers=[{region:'Europa',origin:'FLN',city:'Paris',country:'França',destination:'CDG',price_brl:3500,departure_date:'2027-01-01'},{region:'EUA',origin:'GRU',city:'Miami',country:'Estados Unidos',destination:'MIA',price_brl:3000,departure_date:'2027-02-01'}];
+ assert.equal(filterOffers(offers,{region:'Europa',origin:'FLN',search:'cdg',maxPrice:3500,departureFrom:'2027-01-01',departureTo:'2027-01-01'}).length,1);
+ assert.equal(filterOffers(offers,{region:'Europa',maxPrice:3499}).length,0);
+});
+test('tetos são inclusivos no preço em dinheiro, inclusive LATAM; filtros não os ampliam',()=>{
+ for(const [destination,cap] of [['MIA',3000],['LIS',3500]])for(const airlines of [['LA'],['AA'],['LA','AA']]){
+  const offer={destination,airlines,price_brl:cap};
+  assert.equal(offerAllowed(offer),true);
+  assert.equal(offerAllowed({...offer,price_brl:cap+.01}),false);
+  assert.equal(filterOffers([{...offer,price_brl:cap+.01}],{maxPrice:99999}).length,0);
+ }
+ assert.equal(fareCap({destination:'SFO',country:'Estados Unidos'}),3000);
+ assert.equal(fareCap({destination:'AMS',region:'Europa'}),3500);
+ assert.equal(offerAllowed({destination:'MIA',price_brl:4000,airlines:['LA']}),false);
+ assert.equal(offerAllowed({destination:'NRT',region:'Ásia',price_brl:9000}),true);
+ assert.ok(demoOffers.every(offerAllowed));
 });
 test('conteúdo externo é escapado antes de entrar no HTML',()=>assert.equal(escape('<img src="x" onerror="alert(1)">'), '&lt;img src=&quot;x&quot; onerror=&quot;alert(1)&quot;&gt;'));
 

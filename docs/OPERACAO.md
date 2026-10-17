@@ -68,7 +68,7 @@ Aumentar a frequência exige acompanhar uso real de Edge Functions, tamanho do b
 
 Abra **Administração → Monitor de sessões**. O painel consulta o progresso a cada 15 segundos enquanto estiver visível. Permite escolher entre as 12 sessões recentes, acompanhar a mais nova, filtrar falhas e abrir a execução correspondente no Actions. Atualizações não substituem os formulários da administração.
 
-O consumo compara chamadas efetivamente tentadas com o teto daquela sessão, inclusive o limite manual de teste. A cobertura representa pares únicos origem/destino/ida/volta com preço de calendário capturado dentro da matriz configurada. Preços brutos, datas detalhadas concluídas, tentativas, tarifas salvas, consultas vazias e recuperações aparecem separadamente. Sessões anteriores à implantação não possuem a causa original nem cobertura única retroativa.
+O consumo compara chamadas efetivamente tentadas com o teto daquela sessão, inclusive o limite manual de teste. A cobertura representa pares únicos origem/destino/ida/volta com preço de calendário capturado dentro da matriz configurada. Preços brutos, datas detalhadas concluídas, tentativas, tarifas salvas, descartes por teto de preço, consultas vazias e recuperações aparecem separadamente. Sessões anteriores à implantação não possuem a causa original nem cobertura única retroativa.
 
 O worker publica sinais e salva o cursor em intervalos de aproximadamente 15 segundos, além das mudanças de etapa. Durante uma resposta demorada, o sinal pode ficar temporariamente antigo; após dois minutos o painel avisa e o link do Actions permite conferir a execução. A próxima verificação tenta reconciliar registros sem encerramento com a execução correspondente no GitHub. Sem confirmação, o bloqueio é preservado.
 
@@ -85,3 +85,7 @@ Em **Run workflow**, `mode=scan` executa e mantém a continuidade; `mode=once` e
 O histórico apresenta **requisições**, **preços** e **varreduras completas/solicitadas** separadamente, além da origem e do teto efetivo de cada sessão. Uma requisição não representa seis meses completos; falhas e repetições entram nesse contador. Uma varredura completa corresponde a uma rota e permanência em todo o intervalo solicitado. Os campos novos não são inferidos retroativamente para sessões antigas.
 
 O projeto está em repositório público. A disponibilidade gratuita do wait timer deve ser reavaliada antes de torná-lo privado. A rotina não usa token pessoal nem transfere credenciais GitHub ao Supabase.
+
+### Tetos de publicação
+
+EUA: R$ 3.000; Europa: R$ 3.500, inclusive os valores exatos, por pessoa e ida e volta em dinheiro. A regra vale também para LATAM, antes da simulação de milhas. O preço do calendário continua sendo apenas descoberta: a tarifa do detalhe determina se a oferta será salva. Capturar uma tarifa acima do teto não é falha do Google. O painel registra esse descarte separadamente. Ofertas antigas acima do teto foram expiradas; seu histórico permanece no banco. Destinos de outras regiões mantêm o comportamento anterior.

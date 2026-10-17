@@ -8,6 +8,7 @@ import sys
 from .planner import Planner
 from .storage import Store
 from .provider import FastFlightsProvider
+from .fare_policy import fare_cap,offer_allowed
 from .calendar import BrowserCalendarEngine,best_candidates_per_stay
 from .diagnostics import SearchFailure,diagnose
 from .telemetry import SessionReporter,TelemetryFailure
@@ -78,12 +79,12 @@ def run(store,search=bounded_search,clock=monotonic,calendar_search=None):
     calendar_status='pending' if calendar_active else 'disabled'
     checked=set();started=clock();reason='';seen=set();calendar_partial=False;pending_candidates=[];pending_stops={}
     calendar_tasks_attempted=fallback_tasks_attempted=0;planned_stop=False
-    retries=empty_results=recovered=final_errors=0;priced=set();phase='planning';current=None;last_cursor_write=-100
+    retries=empty_results=recovered=final_errors=filtered=0;priced=set();phase='planning';current=None;last_cursor_write=-100
     sweeps_requested=sweeps_completed=0
     reporter=SessionReporter(store,run['id'],clock)
     proxy=os.environ.get('FLIGHTS_PROXY') or None
     def metrics():
-        return {'queries_attempted':attempts,'offers_found':found,'errors_count':errors,
+        return {'queries_attempted':attempts,'offers_found':found,'offers_price_filtered':filtered,'errors_count':errors,
                 'calendar_queries':calendar_queries,'calendar_entries':calendar_entries,
                 'calendar_sweeps_requested':sweeps_requested,'calendar_sweeps_completed':sweeps_completed,
                 'calendar_search_calls':calendar_search_calls,'calendar_routes':calendar_routes,'detail_queries':detail_queries,'detail_dates_checked':len(checked),'calendar_status':calendar_status,
@@ -182,7 +183,13 @@ def run(store,search=bounded_search,clock=monotonic,calendar_search=None):
                         checked.add(query);consecutive=0
                         if trial==2:recovered+=1
                         if not offer:empty_results+=1
-                        reporter.event('detail','success' if offer else 'empty',query,attempt=trial,duration_ms=(clock()-call_started)*1000,message='Tarifa identificada.' if offer else 'Consulta concluída sem tarifa válida para o par de datas.')
+                        policy_offer={**planner.destinations.get(query.destination,{}),**(offer or {}),'destination':query.destination}
+                        rejected=bool(offer) and not offer_allowed(policy_offer)
+                        if rejected:filtered+=1
+                        cap=fare_cap(policy_offer)
+                        detail_message=(f'Tarifa descartada; teto em dinheiro de R$ {cap:.2f}.' if cap is not None else 'Tarifa inválida descartada.') if rejected else 'Tarifa identificada dentro do teto de preço.' if offer else 'Consulta concluída sem tarifa válida para o par de datas.'
+                        reporter.event('detail','filtered' if rejected else 'success' if offer else 'empty',query,attempt=trial,duration_ms=(clock()-call_started)*1000,message=detail_message)
+                        if rejected:offer=None
                         break
                     except TelemetryFailure:raise
                     except Exception as exc:
@@ -197,7 +204,9 @@ def run(store,search=bounded_search,clock=monotonic,calendar_search=None):
                         final_errors+=1;consecutive+=1;break
                 # Infrastructure failures must fail the run, never be mistaken
                 # for a provider outage or counted as successfully stored fares.
-                if offer:store.save_offer(offer);found+=1
+                if offer:
+                    if store.save_offer(offer) is False:filtered+=1
+                    else:found+=1
                 checkpoint()
                 if reason:break
                 if consecutive>=8:
@@ -216,7 +225,7 @@ def run(store,search=bounded_search,clock=monotonic,calendar_search=None):
         store.request('offers','DELETE',params={'return_date':'lt.'+planner.today.isoformat()},prefer='return=minimal')
         store.request('calendar_jobs','DELETE',prefer='return=minimal')
         store.request('scan_events','DELETE',prefer='return=minimal')
-        print(f'Rodada {status}: {calendar_queries} tentativas de calendário, {calendar_entries} preços de calendário, {detail_queries} consultas detalhadas, {found} tarifas.',flush=True)
+        print(f'Rodada {status}: {calendar_queries} tentativas de calendário, {calendar_entries} preços de calendário, {detail_queries} consultas detalhadas, {found} tarifas salvas, {filtered} acima do teto.',flush=True)
         return 1 if status=='failed' else 0
     except Exception as exc:
         errors+=1

@@ -5,6 +5,7 @@ import time
 from urllib.request import Request,urlopen
 from urllib.error import HTTPError,URLError
 from urllib.parse import urlencode
+from .fare_policy import offer_allowed
 
 class Store:
     def __init__(self,url,key=None):
@@ -65,6 +66,8 @@ class Store:
         return self.request(table,'PATCH',data,{'id':'eq.'+str(id)})
 
     def save_offer(self,offer):
+        if not offer_allowed(offer):return False
         row=self.request('offers','POST',offer,{'on_conflict':'origin,destination,departure_date,return_date'},'resolution=merge-duplicates,return=representation')[0]
         self.request('fare_history','POST',{'offer_id':row['id'],'price_brl':offer['price_brl']},prefer='return=minimal')
+        return True
 
