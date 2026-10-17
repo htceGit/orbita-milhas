@@ -1,4 +1,5 @@
 import io,json,unittest
+from urllib.error import HTTPError
 from worker.dispatch_next import dispatch_next
 
 class Response(io.BytesIO):
@@ -21,3 +22,16 @@ class ContinuationTests(unittest.TestCase):
     def test_other_repository_or_branch_cannot_dispatch(self):
         for repository,ref in [('other/repo','refs/heads/main'),('htceGit/orbita-milhas','refs/heads/other')]:
             with self.assertRaises(ValueError):dispatch_next('token',repository,ref)
+
+    def test_public_environment_check_needs_no_extra_token_permission(self):
+        calls=[]
+        def open_request(request,**kwargs):
+            calls.append(request)
+            if len(calls)==1:raise HTTPError(request.full_url,403,'Forbidden',{},None)
+            if len(calls)==2:
+                self.assertIsNone(request.get_header('Authorization'))
+                return Response(b'{"protection_rules":[{"type":"wait_timer","wait_timer":15}]}')
+            self.assertEqual(request.get_header('Authorization'),'Bearer token')
+            return Response()
+        dispatch_next('token','htceGit/orbita-milhas','refs/heads/main',open_request)
+        self.assertEqual(len(calls),3)

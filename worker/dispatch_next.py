@@ -15,7 +15,13 @@ def dispatch_next(token,repository,ref,opener=urlopen,pause=sleep):
     if not token:raise ValueError('Identidade temporária do job ausente.')
     headers={'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28','Content-Type':'application/json','User-Agent':'orbita-session-continuation'}
     base='https://api.github.com/repos/'+REPOSITORY
-    with opener(Request(base+'/environments/'+ENVIRONMENT,headers=headers),timeout=30) as response:environment=json.load(response)
+    try:
+        with opener(Request(base+'/environments/'+ENVIRONMENT,headers=headers),timeout=30) as response:environment=json.load(response)
+    except HTTPError as exc:
+        if exc.code!=403:raise
+        # The public wait-timer metadata needs no secret or extra permissions.
+        public_headers={key:value for key,value in headers.items() if key!='Authorization'}
+        with opener(Request(base+'/environments/'+ENVIRONMENT,headers=public_headers),timeout=30) as response:environment=json.load(response)
     if not any(rule.get('type')=='wait_timer' and rule.get('wait_timer')==15 for rule in environment.get('protection_rules',[])):
         raise RuntimeError('Pausa nativa de 15 minutos ausente; continuidade bloqueada para evitar repetições sem espera.')
     body=json.dumps({'ref':'main','inputs':{'query_limit':'0','mode':'scan','trigger_source':'continuation'}}).encode()

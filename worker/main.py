@@ -216,7 +216,7 @@ def run(store,search=bounded_search,clock=monotonic,calendar_search=None):
         store.request('offers','DELETE',params={'return_date':'lt.'+planner.today.isoformat()},prefer='return=minimal')
         store.request('calendar_jobs','DELETE',prefer='return=minimal')
         store.request('scan_events','DELETE',prefer='return=minimal')
-        print(f'Rodada {status}: {calendar_queries} calendários, {calendar_entries} preços de calendário, {detail_queries} consultas detalhadas, {found} tarifas.',flush=True)
+        print(f'Rodada {status}: {calendar_queries} tentativas de calendário, {calendar_entries} preços de calendário, {detail_queries} consultas detalhadas, {found} tarifas.',flush=True)
         return 1 if status=='failed' else 0
     except Exception as exc:
         errors+=1
