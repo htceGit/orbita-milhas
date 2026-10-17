@@ -9,6 +9,16 @@ on:
         default: '0'
         required: false
         type: string
+      mode:
+        description: Rotina contínua, execução única ou somente reativar a rotina
+        default: scan
+        type: choice
+        options: [scan, once, arm]
+      trigger_source:
+        description: Origem do disparo (preenchida pela continuidade automática)
+        default: manual
+        type: choice
+        options: [manual, continuation]
 permissions:
   contents: read
   id-token: write
@@ -17,6 +27,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   scan:
+    if: github.event.inputs.mode != 'arm'
     runs-on: ubuntu-latest
     timeout-minutes: 200
     steps:
@@ -43,4 +54,21 @@ jobs:
           CALENDAR_HEADLESS: 'false'
           FLIGHTS_PROXY: ${{ secrets.FLIGHTS_PROXY }}
           QUERY_BUDGET_OVERRIDE: ${{ github.event.inputs.query_limit || '0' }}
+          SCAN_TRIGGER_SOURCE: ${{ github.event_name == 'schedule' && 'schedule' || github.event.inputs.trigger_source || 'manual' }}
         run: xvfb-run --auto-servernum python -m worker.main
+  continue:
+    name: Próxima sessão após pausa de 15 minutos
+    needs: scan
+    if: always() && (github.event.inputs.query_limit || '0') == '0' && github.event.inputs.mode != 'once'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: scanner-pause-15m
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Solicitar próxima sessão com identidade temporária
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -m worker.dispatch_next
