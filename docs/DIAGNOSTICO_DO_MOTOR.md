@@ -29,3 +29,9 @@ A validação final no Actions (`39073852478`, sessão `b7120636-7885-4202-8140-
 5. Após obter amostra confiável, ajustar intervalo e política de repetição conforme as causas observadas. Não repetir automaticamente respostas de bloqueio nem introduzir serviços pagos sem decisão do operador.
 
 O número de preços de calendário não garante disponibilidade de itinerário, companhia específica ou resgate LATAM Pass. A consulta detalhada continua necessária antes da publicação de uma oferta.
+
+## Continuidade validada em produção
+
+Em 17/10/2026, o ambiente `scanner-pause-15m` iniciou a espera às 22:43:02 UTC. Às 22:58:06 UTC, o job solicitou automaticamente a execução `39077164496`, criada por `github-actions[bot]`. A sessão `c445535a-d089-4c9e-8b2f-e1fb5aa9a8f0` começou às 22:58:48 UTC com `trigger_source=continuation`, `query_budget=1000` e sem limite manual de teste. Isso comprova a liberação do temporizador e a chegada ao motor; a sessão estava em andamento durante a validação. O cron permanece como reserva.
+
+O histórico foi ajustado para separar tentativas de calendário, varreduras completas/solicitadas, preços e tentativas de detalhe. Inclui origem e orçamento efetivo. A apresentação móvel foi validada sem rolagem horizontal.
