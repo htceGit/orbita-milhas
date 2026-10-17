@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {estimate,filterOffers,escape} from '../web/domain.js';
+import {estimate,filterOffers,escape,hasLatamProjection,airlineLabel,origins} from '../web/domain.js';
 test('a simulação inclui custo das milhas e taxas, sem inventar uma cotação',()=>{
  const s=estimate(4000,20,350);
  assert.equal(s.low,2800);assert.equal(s.high,3000);
@@ -14,3 +14,10 @@ test('filtros combinam região, origem, destino, preço e intervalo inclusivo',(
  assert.equal(filterOffers(offers,{region:'Europa',maxPrice:3999}).length,0);
 });
 test('conteúdo externo é escapado antes de entrar no HTML',()=>assert.equal(escape('<img src="x" onerror="alert(1)">'), '&lt;img src=&quot;x&quot; onerror=&quot;alert(1)&quot;&gt;'));
+
+test('projeção aparece somente para LATAM identificada, sem companhias mistas ou desconhecidas',()=>{
+ assert.equal(hasLatamProjection({airlines:['LA']}),true);
+ for(const airlines of [['TP'],['LA','AA'],['UNKNOWN'],[],undefined])assert.equal(hasLatamProjection({airlines}),false);
+ assert.equal(airlineLabel({airlines:['TP'],airline_names:['TAP Air Portugal']}),'TAP Air Portugal');
+ assert.deepEqual(origins.map(o=>o[0]),['CWB','JOI','NVT','FLN','VCP','GRU']);
+});

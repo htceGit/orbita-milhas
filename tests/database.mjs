@@ -49,6 +49,14 @@ await db.query("insert into auth.users(id,email) values($1,'reserved@example.tes
 assert.equal((await db.query('select role from public.profiles where id=$1',[reserved])).rows[0].role,'member','reserva ainda não confirmada não vira admin');
 await db.query('update auth.users set email_confirmed_at=now() where id=$1',[reserved]);
 assert.equal((await db.query('select role from public.profiles where id=$1',[reserved])).rows[0].role,'admin','confirmação consome reserva administrativa');
+const allowedOrigins=['CWB','JOI','NVT','FLN','VCP','GRU'];
+assert.deepEqual((await db.query('select origins from public.scanner_settings')).rows[0].origins,allowedOrigins);
+await assert.rejects(db.exec("update public.scanner_settings set origins=array['CGH']"),/scanner_origins_allowed/);
+await db.exec(`insert into public.offers(origin,destination,city,country,region,departure_date,return_date,price_brl,airlines,airline_names,booking_url,carrier_validation) values('GRU','MIA','Miami','Estados Unidos','EUA','2027-01-01','2027-01-15',3500,array['AV'],array['Avianca'],'https://www.google.com/travel/flights','outbound_only')`);
+assert.equal((await db.query('select airline_names from public.offers')).rows[0].airline_names[0],'Avianca');
+await as(admin);
+await assert.rejects(db.query(`insert into public.monitors(user_id,origin,destination) values($1,'CGH','MIA')`,[admin]),/monitors_enabled_origins/);
+await db.exec('reset role');
 const rls=await db.query("select tablename from pg_tables where schemaname in ('public','private') and rowsecurity=false");
 assert.equal(rls.rows.length,0,'RLS em todas as tabelas do produto');
 console.log('Banco validado: isolamento, limites Free/Pro, bloqueio de elevação de privilégio, suspensão e acesso administrativo.');

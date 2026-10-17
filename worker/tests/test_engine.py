@@ -27,6 +27,11 @@ class PlannerTests(unittest.TestCase):
   m['min_days']=25;m['max_days']=26
   p=Planner(config(),[m],date(2026,10,17))
   self.assertIn(('FLN','MIA',26),p.lanes)
+ def test_removed_origins_cannot_reenter_via_monitor(self):
+  m={'origin':'IGU','destination':'MIA','min_days':7,'max_days':20,'enabled':True}
+  self.assertNotIn(('IGU','MIA'),Planner(config(),[m],date.today()).routes)
+  c=config();c['origins']=['CGH']
+  with self.assertRaises(ValueError):Planner(c,[],date.today())
  def test_invalid_config(self):
   c=config();c['min_days']=21
   with self.assertRaises(ValueError):Planner(c,[],date.today())
@@ -34,10 +39,11 @@ class PlannerTests(unittest.TestCase):
 class FareTests(unittest.TestCase):
  def setUp(self):self.q=Search('GRU','MIA',date(2026,11,20),date(2026,12,4))
  def fare(self,price,airlines=['LA']):return N(price=price,airlines=airlines,flights=[N(from_airport=N(code='GRU'),to_airport=N(code='MIA'),departure=N(date=(2026,11,20)))])
- def test_only_real_positive_latam_fares(self):
+ def test_cheapest_real_positive_fare_any_airline(self):
   values=[self.fare(None),self.fare(0),self.fare(1500,['AA']),self.fare(1200,['LA','BA']),self.fare(float('nan')),self.fare(3500),self.fare(3200)]
   o=normalize_cheapest(values,self.q,{'city':'Miami'},'https://www.google.com/travel/flights')
-  self.assertEqual(o['price_brl'],3200)
+  self.assertEqual(o['price_brl'],1200)
+  self.assertEqual(o['airlines'],['BA','LA'])
   self.assertEqual(o['return_date'],'2026-12-04')
   self.assertNotIn('miles',o)
   self.assertEqual(o['fare_scope'],'round_trip_search')
@@ -49,5 +55,8 @@ class FareTests(unittest.TestCase):
  def test_no_results_does_not_create_offer(self):self.assertIsNone(normalize_cheapest([],self.q,{},''))
  def test_pypi_airline_names_and_mixed_carriers(self):
   values=[self.fare(3000,['LATAM']),self.fare(1000,['LATAM','American Airlines'])]
-  self.assertEqual(normalize_cheapest(values,self.q,{},'')['price_brl'],3000)
+  o=normalize_cheapest(values,self.q,{},'')
+  self.assertEqual(o['price_brl'],1000)
+  self.assertEqual(o['airlines'],['AA','LA'])
+  self.assertEqual(o['airline_names'],['LATAM','American Airlines'])
 if __name__=='__main__':unittest.main()

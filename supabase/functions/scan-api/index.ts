@@ -10,6 +10,7 @@ const readTables=new Set(['profiles','scanner_settings','monitors','scanner_stat
 const writeTables=new Set(['offers','fare_history','scan_runs']);
 const patchTables=new Set(['scan_runs','scanner_state']);
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const origins=new Set(['CWB','JOI','NVT','FLN','VCP','GRU']);
 
 Deno.serve(async(req:Request)=>{
  if(req.method!=='POST')return response({error:'Método não permitido'},405);
@@ -36,7 +37,7 @@ Deno.serve(async(req:Request)=>{
   }else if(method==='POST'&&writeTables.has(table)){
    if(!data||typeof data!=='object'||Array.isArray(data))return response({error:'Dados inválidos'},400);
    if(table==='offers'){
-    if(!/^[A-Z]{3}$/.test(data.origin)||!/^[A-Z]{3}$/.test(data.destination)||!Number.isFinite(data.price_brl)||data.price_brl<=0||JSON.stringify(data.airlines)!=='["LA"]'||!String(data.booking_url).startsWith('https://www.google.com/travel/flights'))return response({error:'Tarifa inválida'},400);
+    if(!origins.has(data.origin)||!/^[A-Z]{3}$/.test(data.destination)||!Number.isFinite(data.price_brl)||data.price_brl<=0||!Array.isArray(data.airlines)||data.airlines.length<1||data.airlines.length>8||data.airlines.some((a:unknown)=>typeof a!=='string'||!/^([A-Z0-9]{2,3}|UNKNOWN)$/.test(a))||!Array.isArray(data.airline_names)||data.airline_names.length<1||data.airline_names.length>8||data.airline_names.some((a:unknown)=>typeof a!=='string'||a.length<1||a.length>150)||data.carrier_validation!=='outbound_only'||!String(data.booking_url).startsWith('https://www.google.com/travel/flights'))return response({error:'Tarifa inválida'},400);
     query.on_conflict='origin,destination,departure_date,return_date';
     prefer='resolution=merge-duplicates,return=representation';
    }

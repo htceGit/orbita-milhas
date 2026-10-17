@@ -26,9 +26,9 @@ Não desative a confirmação para contornar limites de e-mail: ela protege a re
 
 ## Execuções
 
-Em **GitHub → Actions → Radar LATAM · a cada 4 horas → Run workflow**, faça uma execução manual quando precisar. Não há chave Supabase para copiar: a função já aceita apenas a identidade OIDC desse workflow na branch principal.
+Em **GitHub → Actions → Radar Órbita · a cada 4 horas → Run workflow**, faça uma execução manual quando precisar. Não há chave Supabase para copiar: a função já aceita apenas a identidade OIDC desse workflow na branch principal.
 
-O cron é aproximado e deve ser acompanhado. Falhas de parsing/bloqueios do Google aparecem como falhas de consulta. Oito falhas consecutivas interrompem a rodada. Um timeout do job ou cancelamento forçado pode deixar uma execução como `running`; o cursor continua salvo. Confira o Actions e não trate esse registro como uma rodada concluída.
+O cron é aproximado e deve ser acompanhado. Falhas de parsing/bloqueios do Google aparecem como falhas de consulta. O calendário tenta descobrir datas; se houver erro RPC ou bloqueio, o motor usa a fila detalhada e registra o motivo. Oito falhas consecutivas da busca detalhada interrompem a rodada. O campo opcional `query_limit` na execução manual limita as chamadas para testes; zero utiliza o orçamento do portal. Um timeout do job ou cancelamento forçado pode deixar uma execução como `running`; o cursor continua salvo. Confira o Actions e não trate esse registro como uma rodada concluída.
 
 Contas suspensas não contribuem com radares para o motor. Ao expirar Pro, somente os três radares mais antigos são pesquisados até que o usuário reorganize as rotas. Pausar o motor não interrompe imediatamente uma rodada que já começou; a opção é lida no início de cada execução.
 

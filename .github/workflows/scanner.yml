@@ -1,8 +1,14 @@
-name: Radar LATAM · a cada 4 horas
+name: Radar Órbita · a cada 4 horas
 on:
   schedule:
     - cron: '17 */4 * * *'
   workflow_dispatch:
+    inputs:
+      query_limit:
+        description: Limite de consultas para teste (0 usa a configuração do portal)
+        default: '0'
+        required: false
+        type: string
 permissions:
   contents: read
   id-token: write
@@ -25,4 +31,5 @@ jobs:
         env:
           SUPABASE_URL: https://czywkkvwwtcikigbxvty.supabase.co
           FLIGHTS_PROXY: ${{ secrets.FLIGHTS_PROXY }}
+          QUERY_BUDGET_OVERRIDE: ${{ github.event.inputs.query_limit || '0' }}
         run: python -m worker.main

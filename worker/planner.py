@@ -8,6 +8,8 @@ from math import gcd
 import json
 import re
 
+ORIGINS = ('CWB','JOI','NVT','FLN','VCP','GRU')
+
 @dataclass(frozen=True)
 class Search:
     origin: str
@@ -26,7 +28,7 @@ class Planner:
         if not 1 <= low <= high <= 60 or not 1 <= horizon <= 6:
             raise ValueError('Intervalo de datas inválido.')
         codes = settings['origins']
-        if not codes or any(not re.fullmatch(r'[A-Z]{3}', c) for c in codes):
+        if not codes or any(c not in ORIGINS for c in codes):
             raise ValueError('Origens inválidas.')
         routes = {}
         self.destinations = {d['code']:d for d in settings['destinations']}
@@ -35,7 +37,7 @@ class Planner:
                 if d.get('enabled'):
                     routes.setdefault((origin,d['code']),set()).update(range(low,high+1))
         for m in monitors:
-            if m.get('enabled'):
+            if m.get('enabled') and m['origin'] in codes:
                 if not 1<=m['min_days']<=m['max_days']<=60:
                     raise ValueError('Permanência do radar inválida.')
                 routes.setdefault((m['origin'],m['destination']),set()).update(range(m['min_days'],m['max_days']+1))
