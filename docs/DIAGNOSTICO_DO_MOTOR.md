@@ -8,6 +8,8 @@ A repetição local de CWB → MCO, 11–18/03/2027, retornou quatro opções pe
 
 Na primeira validação do novo diagnóstico no Actions (`39072643010`), o calendário preservou 360 preços antes de um `TimeoutError` ao abrir o botão `Price graph`; duas consultas detalhadas registraram `IndexError` e outra registrou `FlightsNotFound`. Isso confirma problemas de interpretação e espera nessa amostra, sem evidência de HTTP 403/429. O teste também detectou um lote de eventos com campos heterogêneos recusado pelo banco. O envio foi padronizado e recebeu teste de regressão; o encerramento da sessão é tentado mesmo quando os eventos não podem ser gravados.
 
+A validação final no Actions (`39073852478`, sessão `b7120636-7885-4202-8140-67c310c1d2b1`) encerrou normalmente: 12 chamadas de um teto de 20, 120 pares únicos com preço de calendário, quatro datas detalhadas em cinco tentativas e quatro tarifas salvas. Uma falha `FlightsNotFound` foi recuperada na única repetição. Os nove eventos, incluindo causas e encerramento, foram persistidos. A sessão ficou parcial pelo timeout de calendário. O ensaio curto valida contadores, recuperação e persistência; sua cobertura não representa uma rodada de 1.000 chamadas.
+
 ## Mudanças implementadas
 
 - Preservação da causa ao atravessar o subprocesso: código, classe original, mensagem sanitizada, status HTTP e possibilidade de nova tentativa.
