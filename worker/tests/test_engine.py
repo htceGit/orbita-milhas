@@ -47,4 +47,7 @@ class FareTests(unittest.TestCase):
   item=self.fare(1000);item.flights[0].departure.date=(2026,11,21)
   self.assertIsNone(normalize_cheapest([item],self.q,{},''))
  def test_no_results_does_not_create_offer(self):self.assertIsNone(normalize_cheapest([],self.q,{},''))
+ def test_pypi_airline_names_and_mixed_carriers(self):
+  values=[self.fare(3000,['LATAM']),self.fare(1000,['LATAM','American Airlines'])]
+  self.assertEqual(normalize_cheapest(values,self.q,{},'')['price_brl'],3000)
 if __name__=='__main__':unittest.main()

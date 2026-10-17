@@ -6,11 +6,14 @@ from .planner import Search
 class ProviderError(RuntimeError):
     pass
 
-def normalize_cheapest(results, query: Search, metadata:dict, url:str, now=None):
+def normalize_cheapest(results, query: Search, metadata:dict, url:str, now=None, allowed_carriers=None):
+    # The pinned PyPI parser returns airline names; upstream development may
+    # return IATA codes. Resolve names from the response's airline metadata.
+    allowed_carriers=allowed_carriers or {'LA','LATAM','LATAM Airlines'}
     candidates=[]
     for item in results:
         # Never convert missing, unpriced or mixed-carrier results into a bargain.
-        if not item.airlines or any(code!='LA' for code in item.airlines):
+        if not item.airlines or any(code not in allowed_carriers for code in item.airlines):
             continue
         if not isinstance(item.price,(int,float)) or isinstance(item.price,bool) or not math.isfinite(item.price) or item.price<=0:
             continue
@@ -56,5 +59,10 @@ class FastFlightsProvider:
         except Exception as exc:
             # Do not include proxy credentials or request contents in logs.
             raise ProviderError(type(exc).__name__) from None
-        return normalize_cheapest(results,query,metadata,q.url())
+        allowed={'LA'}
+        airline_metadata=getattr(getattr(results,'metadata',None),'airlines',[])
+        allowed.update(a.name for a in airline_metadata if a.code=='LA')
+        # The release uses the canonical LATAM name when metadata is absent.
+        allowed.update({'LATAM','LATAM Airlines'})
+        return normalize_cheapest(results,query,metadata,q.url(),allowed_carriers=allowed)
 
