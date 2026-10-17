@@ -9,13 +9,19 @@ from urllib.parse import parse_qs,urlparse
 import json
 import os
 from .domain import CalendarQuery,CalendarCapture,CalendarUnavailable,CalendarBlocked,parse_calendar
-from worker.diagnostics import diagnose
+from worker.diagnostics import SearchFailure,diagnose
 from worker.telemetry import TelemetryFailure
 
 
 def calendar_rpc(url):
     parsed=urlparse(url)
     return parsed.hostname=='www.google.com' and 'FlightsFrontendService/GetCalendar' in parsed.path
+
+
+def ensure_calendar_response(response):
+    if not response:return
+    if response.status in (403,429):raise CalendarBlocked('O Google limitou a captura. Aguarde a próxima rodada.',response.status)
+    if response.status>=400:raise SearchFailure('upstream_http','HTTPError',f'Calendário HTTP {response.status}',response.status,response.status in (500,502,503,504))
 
 
 def rpc_range(request,expected=None):
@@ -73,6 +79,7 @@ class BrowserCalendarEngine:
         def report():
             if progress:progress({'search_calls':capture.search_calls,'calendar_requests':capture.calendar_requests,'prices':tuple(values.values()),'current':dict(current)})
         def guard():
+            if 'consent.google.com' in page.url:raise SearchFailure('consent_required','ConsentRequired','A pesquisa direcionou para uma página de consentimento.')
             if '/sorry/' in page.url or page.locator('iframe[src*="recaptcha"]').count():raise CalendarBlocked('O Google solicitou verificação humana. A captura foi interrompida.')
             if monotonic()-started>timeout_seconds:raise CalendarUnavailable('Limite de tempo da captura atingido.')
             if capture.search_calls>=budget:raise CalendarUnavailable('Orçamento de consultas atingido durante a captura.')
@@ -81,7 +88,7 @@ class BrowserCalendarEngine:
             current['stay_days']=stay;report()
             with page.expect_response(lambda r:calendar_rpc(r.url),timeout=25000) as waiting:action()
             response=waiting.value
-            if response.status in (403,429):raise CalendarBlocked('O Google limitou a captura. Aguarde a próxima rodada.',response.status)
+            ensure_calendar_response(response)
             if response.status!=200:raise CalendarUnavailable(f'Calendário HTTP {response.status}')
             first,last,durations=rpc_range(response.request,query)
             if durations!=[stay,stay]:raise CalendarUnavailable('A duração retornada difere da duração solicitada.')
@@ -95,7 +102,7 @@ class BrowserCalendarEngine:
             # The native graph starts seven days before the selected departure.
             anchor=min(query.departure_start+timedelta(days=7),query.departure_end)
             response=page.goto(search_url(query,anchor),wait_until='domcontentloaded',timeout=45000)
-            if response and response.status in (403,429):raise CalendarBlocked('O Google limitou a página de pesquisa.',response.status)
+            ensure_calendar_response(response)
             guard()
             # SSR buttons can be replaced during hydration. The currency control
             # gets its accessible name after the page is interactive.
@@ -110,7 +117,7 @@ class BrowserCalendarEngine:
                     guard();capture.search_calls+=1
                     report()
                     anchor=min(window_start+timedelta(days=7),window_end)
-                    page.goto(search_url(query,anchor),wait_until='domcontentloaded',timeout=45000)
+                    ensure_calendar_response(page.goto(search_url(query,anchor),wait_until='domcontentloaded',timeout=45000))
                     page.get_by_role('button',name='Currency BRL',exact=True).wait_for(timeout=25000)
                 try:page.wait_for_load_state('networkidle',timeout=10000)
                 except Exception:pass
@@ -127,7 +134,7 @@ class BrowserCalendarEngine:
                         # repeated failure remains partial; no retry loop.
                         retried=True;sleep(3);guard();capture.search_calls+=1
                         report()
-                        page.goto(search_url(replace(query,min_days=stay,max_days=stay),anchor),wait_until='domcontentloaded',timeout=45000)
+                        ensure_calendar_response(page.goto(search_url(replace(query,min_days=stay,max_days=stay),anchor),wait_until='domcontentloaded',timeout=45000))
                         page.get_by_role('button',name='Currency BRL',exact=True).wait_for(timeout=25000)
                         try:page.wait_for_load_state('networkidle',timeout=10000)
                         except Exception:pass

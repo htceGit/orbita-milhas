@@ -4,6 +4,8 @@ from worker.diagnostics import SearchFailure,diagnose,safe_message
 from worker.main import child_search,run
 from worker.provider import parse_response
 from worker.telemetry import TelemetryFailure
+from calendar_service.browser import ensure_calendar_response
+from types import SimpleNamespace
 from calendar_service.domain import CalendarQuery,CalendarCapture,CalendarPrice,CalendarBlocked
 from calendar_service.jobs import process_queued
 from worker.planner import Search
@@ -23,6 +25,13 @@ class DiagnosticTests(unittest.TestCase):
   kind,data=connection.value
   self.assertEqual(kind,'error');self.assertEqual(data['cause_type'],'IndexError')
   self.assertEqual(SearchFailure.from_diagnostic(data).code,'parse_error')
+ def test_calendar_http_status_is_preserved_before_parsing(self):
+  for status,code in [(403,'access_denied'),(429,'rate_limited'),(503,'upstream_http')]:
+   with self.assertRaises(Exception) as context:ensure_calendar_response(SimpleNamespace(status=status))
+   diagnostic=diagnose(context.exception)
+   self.assertEqual(diagnostic['code'],code)
+   self.assertEqual(diagnostic['http_status'],status)
+  ensure_calendar_response(SimpleNamespace(status=200))
  def test_secrets_urls_emails_and_paths_are_removed(self):
   value=safe_message('Authorization: Bearer abc123 token=hidden password=secret https://example.test/?key=secret /Users/person/secrets.txt somebody@example.test')
   for secret in ['abc123','hidden','secret','example.test','/Users/person','somebody@']:self.assertNotIn(secret,value)
