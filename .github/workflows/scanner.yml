@@ -1,0 +1,28 @@
+name: Radar LATAM · a cada 4 horas
+on:
+  schedule:
+    - cron: '17 */4 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: latam-scanner
+  cancel-in-progress: false
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 200
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: worker/requirements.txt
+      - run: pip install -r worker/requirements.txt
+      - name: Consultar tarifas e salvar oportunidades
+        env:
+          SUPABASE_URL: https://czywkkvwwtcikigbxvty.supabase.co
+          FLIGHTS_PROXY: ${{ secrets.FLIGHTS_PROXY }}
+        run: python -m worker.main

@@ -1,0 +1,13 @@
+import { build } from 'esbuild';
+import { mkdir, cp, writeFile, rm, readFile } from 'node:fs/promises';
+const config=JSON.parse(await readFile('public-config.json','utf8'));
+const url = process.env.PUBLIC_SUPABASE_URL ?? config.supabaseUrl ?? '';
+const key = process.env.PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? config.supabasePublishableKey ?? '';
+if (key && !key.startsWith('sb_publishable_')) throw new Error('Use uma chave pública sb_publishable_, nunca uma chave secreta.');
+if (url && !/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(url)) throw new Error('URL Supabase inválida.');
+await rm('dist', {recursive:true, force:true});
+await mkdir('dist', {recursive:true});
+await Promise.all(['index.html', 'styles.css', 'favicon.svg'].map(f => cp(`web/${f}`, `dist/${f}`)));
+await build({entryPoints:['web/app.js'], bundle:true, minify:true, sourcemap:false, outfile:'dist/app.js', format:'esm', target:['es2022'], define:{__SUPABASE_URL__:JSON.stringify(url), __SUPABASE_KEY__:JSON.stringify(key)}});
+await writeFile('dist/.nojekyll','');
+console.log(`Build pronto em dist/ · ${url ? 'Supabase configurado' : 'modo demonstração, sem credenciais'}`);

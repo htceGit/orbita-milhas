@@ -1,0 +1,6 @@
+project_id = "orbita-milhas"
+
+[functions.scan-api]
+# A própria função verifica assinatura, validade e claims do JWT OIDC GitHub.
+verify_jwt = false
+
