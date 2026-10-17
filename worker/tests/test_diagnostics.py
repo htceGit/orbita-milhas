@@ -75,6 +75,7 @@ class RecoveryTests(unittest.TestCase):
   with self.assertRaises(TelemetryFailure):run(store,calendar_search=lambda *args:None)
   self.assertEqual(store.result['status'],'failed')
   self.assertEqual(store.result['phase'],'failed')
+  self.assertEqual(store.result['errors_count'],1)
   self.assertIsNotNone(store.result['finished_at'])
  @patch.dict('os.environ',{'QUERY_DELAY_SECONDS':'0','RETRY_DELAY_SECONDS':'0','QUERY_BUDGET_OVERRIDE':'0'})
  def test_retry_does_not_spend_reserved_second_candidate_call(self):

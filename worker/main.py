@@ -210,6 +210,7 @@ def run(store,search=bounded_search,clock=monotonic,calendar_search=None):
         print(f'Rodada {status}: {calendar_queries} calendários, {calendar_entries} preços de calendário, {detail_queries} consultas detalhadas, {found} tarifas.',flush=True)
         return 1 if status=='failed' else 0
     except Exception as exc:
+        errors+=1
         try:reporter.event('system','error',diagnostic=diagnose(exc));reporter.flush_events()
         except TelemetryFailure:pass
         # Event storage can fail while the run summary is still writable.
