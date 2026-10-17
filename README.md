@@ -35,7 +35,7 @@ O modo híbrido usa um adaptador local do protocolo de calendário referenciado 
 
 A atividade separa chamadas de calendário, preços descobertos, consultas detalhadas, tarifas publicadas e falhas. Não transforma preços de calendário em porcentagem de cobertura validada. São pesquisadas rotas e permanências diferentes, com datas distribuídas pelos seis meses. Como o horizonte se desloca diariamente, a fila não garante revisão integral de todos os pares absolutos de datas.
 
-O modo completo tem limite operacional de três horas, timeout por chamada e interrupção após oito falhas consecutivas nas consultas detalhadas. Falhas do banco interrompem a execução como erro de infraestrutura. Calendário e consulta detalhada são integrações não oficiais sujeitas a bloqueios.
+O modo ampliado tem limite operacional de três horas, timeout por chamada e interrupção após oito falhas consecutivas nas consultas detalhadas. Falhas do banco interrompem a execução como erro de infraestrutura. Calendário e consulta detalhada são integrações não oficiais sujeitas a bloqueios.
 
 O cron é `17 */4 * * *` (UTC): aproximadamente 01:17, 05:17, 09:17, 13:17, 17:17 e 21:17 em São Paulo. O GitHub pode atrasar ou suspender agendas por inatividade; não é um serviço com garantia de pontualidade. A execução continua com o navegador fechado. Tarifas deixam de aparecer após oito horas; histórico de preço é retido por 90 dias.
 

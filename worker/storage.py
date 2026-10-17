@@ -1,4 +1,4 @@
-"""Supabase REST service adapter. The service key stays inside GitHub Secrets."""
+"""Supabase REST service adapter. Scheduled runs authenticate with GitHub OIDC; no service key in GitHub."""
 import json
 import os
 import time
