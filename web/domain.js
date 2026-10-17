@@ -30,3 +30,17 @@ export const demoOffers=[
 
 export function hasLatamProjection(offer){return Array.isArray(offer.airlines)&&offer.airlines.length===1&&offer.airlines[0]==='LA';}
 export function airlineLabel(offer){return (offer.airline_names?.length?offer.airline_names:offer.airlines?.map(c=>c==='LA'?'LATAM':c)||['Companhia não identificada']).join(' + ');}
+
+export function calendarCandidates(entries,limit=5){
+  const unique=new Map();
+  for(const entry of entries){
+    const key=[entry.origin,entry.destination,entry.departure_date,entry.return_date].join('|');
+    if(!unique.has(key)||entry.price_brl<unique.get(key).price_brl)unique.set(key,entry);
+  }
+  const counts=new Map();
+  return [...unique.values()].sort((a,b)=>a.price_brl-b.price_brl||a.departure_date.localeCompare(b.departure_date)).filter(entry=>{
+    const group=[entry.origin,entry.destination,entry.stay_days].join('|'),count=counts.get(group)||0;
+    if(count>=limit)return false;
+    counts.set(group,count+1);return true;
+  });
+}

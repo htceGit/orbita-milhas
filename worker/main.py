@@ -8,7 +8,7 @@ import sys
 from .planner import Planner
 from .storage import Store
 from .provider import FastFlightsProvider
-from .calendar import BrowserCalendarEngine,best_candidates
+from .calendar import BrowserCalendarEngine,best_candidates_per_stay
 from calendar_service.domain import CalendarQuery,CalendarBlocked
 from calendar_service.jobs import capture_record,process_queued
 
@@ -57,10 +57,11 @@ def run(store,search=bounded_search,clock=monotonic,calendar_search=None):
     cursor=state['cursor_position'] if same else 0
     calendar_cursor=state.get('calendar_cursor',0) if same else 0
     if settings['search_mode']=='exhaustive':cursor=calendar_cursor=0
-    budget=planner.total if settings['search_mode']=='exhaustive' else min(settings['query_budget'],planner.total)
+    calendar_active=settings.get('search_strategy','hybrid')=='hybrid'
+    budget=planner.total if settings['search_mode']=='exhaustive' else settings['query_budget']
+    if not calendar_active:budget=min(budget,planner.total)
     override=int(os.environ.get('QUERY_BUDGET_OVERRIDE','0') or 0)
     if override>0:budget=min(budget,override)
-    calendar_active=settings.get('search_strategy','hybrid')=='hybrid'
     engine=BrowserCalendarEngine() if calendar_search is None else None
     if engine:
         calendar_search=lambda a,b,start,end,low,high,stops,proxy,max_calls:engine.capture(CalendarQuery(a,b,start,end,low,high,stops),max_search_calls=max_calls,proxy=proxy)
@@ -68,6 +69,7 @@ def run(store,search=bounded_search,clock=monotonic,calendar_search=None):
     attempts=found=errors=consecutive=calendar_queries=calendar_entries=detail_queries=calendar_search_calls=calendar_routes=calendar_errors=0
     calendar_status='pending' if calendar_active else 'disabled'
     checked=set();started=clock();reason='';seen=set();calendar_partial=False;pending_candidates=[];pending_stops={}
+    calendar_tasks_attempted=fallback_tasks_attempted=0;planned_stop=False
     proxy=os.environ.get('FLIGHTS_PROXY') or None
     def metrics():
         return {'queries_attempted':attempts,'offers_found':found,'errors_count':errors,
@@ -90,12 +92,19 @@ def run(store,search=bounded_search,clock=monotonic,calendar_search=None):
         while attempts<budget:
             if clock()-started>3*3600:
                 reason='Limite de 3 horas; a fila será retomada.';break
-            candidates=pending_candidates[:3];pending_candidates=pending_candidates[3:]
-            task=planner.calendar_tasks[calendar_cursor%len(planner.calendar_tasks)]
-            calendar_query=CalendarQuery(task[0],task[1],planner.today+timedelta(days=1),planner.today+timedelta(days=planner.days),task[2],task[3],settings['max_stops'])
-            if not candidates and calendar_active and calendar_query.estimated_calls+1<=budget-attempts:
+            candidates=pending_candidates;pending_candidates=[]
+            if not candidates and calendar_active:
+                if calendar_tasks_attempted>=len(planner.calendar_tasks):
+                    if calendar_status=='unavailable':calendar_active=False
+                    else:
+                        reason='Todos os calendários da fila foram percorridos nesta rodada.';planned_stop=True;break
+                task=planner.calendar_batch(calendar_cursor,budget-attempts,len(planner.calendar_tasks)-calendar_tasks_attempted) if calendar_active else None
+                if calendar_active and task is None:
+                    reason='Saldo reservado: a próxima rodada retoma o próximo calendário com até cinco detalhes por permanência.';planned_stop=True;break
+            if not candidates and calendar_active:
+                calendar_query=CalendarQuery(task[0],task[1],planner.today+timedelta(days=1),planner.today+timedelta(days=planner.days),task[2],task[3],settings['max_stops'])
                 try:
-                    capture=calendar_search(*task[:2],calendar_query.departure_start,calendar_query.departure_end,*task[2:],settings['max_stops'],proxy,budget-attempts-1)
+                    capture=calendar_search(*task[:2],calendar_query.departure_start,calendar_query.departure_end,*task[2:],settings['max_stops'],proxy,budget-attempts-calendar_query.detail_reserve)
                 except Exception as exc:
                     used=max(1,getattr(exc,'search_calls',0));attempts+=used;calendar_search_calls+=used
                     errors+=1;calendar_errors+=1;calendar_status='unavailable';calendar_partial=True
@@ -106,16 +115,23 @@ def run(store,search=bounded_search,clock=monotonic,calendar_search=None):
                     calendar_entries+=len(capture.entries);calendar_routes+=1;calendar_status='available';calendar_errors=0
                     if capture.status!='completed':errors+=1;calendar_partial=True
                     store.request('calendar_jobs','POST',capture_record(capture,run['id']))
-                    candidates=[v.query for v in best_candidates(capture.entries,min(3,budget-attempts))]
-                    print(f'Calendário {task[0]}–{task[1]}: {len(capture.entries)} preços; {capture.search_calls} chamadas; {capture.status}.',flush=True)
-                calendar_cursor=(calendar_cursor+1)%len(planner.calendar_tasks)
+                    candidates=[v.query for v in best_candidates_per_stay(capture.entries)]
+                    print(f'Calendário {task[0]}–{task[1]} ({task[2]}–{task[3]} dias): {len(capture.entries)} preços; {capture.search_calls} chamadas; {len(candidates)} datas selecionadas; {capture.status}.',flush=True)
+                task_count=task[3]-task[2]+1
+                calendar_tasks_attempted+=task_count
+                calendar_cursor=(calendar_cursor+task_count)%len(planner.calendar_tasks)
                 checkpoint(True)
                 if calendar_active and not candidates:
                     sleep(float(os.environ.get('QUERY_DELAY_SECONDS','1.5')));continue
             if not candidates:
+                if fallback_tasks_attempted>=planner.total:
+                    reason='A fila detalhada foi percorrida nesta rodada.';planned_stop=True;break
                 candidates=[planner.at(cursor)];cursor=(cursor+1)%planner.total
+                fallback_tasks_attempted+=1
             for query in candidates:
                 if attempts>=budget:break
+                if clock()-started>3*3600:
+                    reason='Limite de 3 horas; a fila será retomada.';break
                 if query in seen:continue
                 seen.add(query);attempts+=1;detail_queries+=1
                 try:
@@ -131,10 +147,10 @@ def run(store,search=bounded_search,clock=monotonic,calendar_search=None):
                 if consecutive>=8:
                     reason='Circuito interrompido após 8 falhas consecutivas nas consultas detalhadas.';break
                 sleep(float(os.environ.get('QUERY_DELAY_SECONDS','1.5')))
-            if consecutive>=8:break
+            if consecutive>=8 or reason:break
         if calendar_entries and calendar_partial:calendar_status='partial'
         complete=len(checked)==planner.total and errors==0
-        status='failed' if detail_queries and not checked else('completed' if attempts>=budget and not errors else 'partial')
+        status='failed' if detail_queries and not checked else('completed' if (attempts>=budget or planned_stop) and not errors else 'partial')
         message=reason or ('Rodada encerrada; descoberta de datas e validação detalhada são contadas separadamente.')
         if calendar_status=='unavailable':message+=' Calendário indisponível: busca detalhada utilizada automaticamente.'
         store.patch('scan_runs',run['id'],{**metrics(),'status':status,'finished_at':datetime.now(timezone.utc).isoformat(),'coverage_complete':complete,'message':message})

@@ -85,3 +85,9 @@ CALENDAR_BROWSER_CHANNEL=chrome .venv/bin/python -m calendar_service.smoke
 ```
 
 O smoke faz uma captura real pequena via HTTP, verifica recusa sem autenticação e reutilização do cache quando a captura termina completa. Gera uma credencial temporária em memória; não imprime nem salva esse token. Não persiste ofertas no banco. A captura do Google pode ser parcial ou indisponível em qualquer ambiente, especialmente em datacenters. Não há solver de CAPTCHA, reutilização de conta pessoal nem garantia de cobertura integral.
+
+## Seleção das melhores datas
+
+O worker seleciona até **cinco pares de datas distintos para cada origem × destino × permanência** depois de reunir todas as janelas da captura. Uma captura de 7–20 dias pode gerar até 70 consultas detalhadas. As cinco vagas são para o período inteiro de cada duração, não para cada janela. Uma captura parcial só permite ordenar os preços já obtidos; não confirma que sejam os cinco menores de todo o horizonte.
+
+O orçamento da rodada reserva essas consultas antes de iniciar a captura. Pedidos manuais sem saldo suficiente ficam na fila. Nas pesquisas automáticas, o planejador pode agrupar parte das durações e retomar a próxima duração na rodada seguinte. A administração mostra a mesma regra de seleção, mas a presença de um preço no calendário não comprova que a consulta detalhada tenha sido concluída.

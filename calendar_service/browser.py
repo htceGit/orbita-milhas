@@ -60,8 +60,9 @@ class BrowserCalendarEngine:
             if parts.username:options['proxy'].update(username=parts.username,password=parts.password or '')
         self.browser=self.playwright.chromium.launch(**options)
 
-    def capture(self,query:CalendarQuery,max_search_calls=None,proxy=None,timeout_seconds=240):
+    def capture(self,query:CalendarQuery,max_search_calls=None,proxy=None,timeout_seconds=None):
         query.validate();self._start(proxy)
+        timeout_seconds=timeout_seconds if timeout_seconds is not None else max(240,min(900,query.estimated_calls*8))
         capture=CalendarCapture(query);values={};started=monotonic()
         budget=max_search_calls or query.estimated_calls+2*ceil(query.days/60)
         context=self.browser.new_context(locale='en-US',timezone_id='America/Sao_Paulo',viewport={'width':1280,'height':900})

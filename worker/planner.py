@@ -4,12 +4,16 @@ from calendar import monthrange
 from dataclasses import dataclass
 from datetime import date, timedelta
 from hashlib import sha256
-from math import gcd
-from itertools import groupby
+from math import gcd,ceil
 import json
 import re
 
 ORIGINS = ('CWB','JOI','NVT','FLN','VCP','GRU')
+CALENDAR_DETAILS_PER_STAY = 5
+CALENDAR_WINDOW_DAYS = 60
+
+def calendar_calls(days:int,stays:int) -> int:
+    return ceil(days/CALENDAR_WINDOW_DAYS)*(stays+1)
 
 @dataclass(frozen=True)
 class Search:
@@ -48,11 +52,10 @@ class Planner:
         if any(not re.fullmatch(r'[A-Z]{3}', v) for route in routes for v in route):
             raise ValueError('Código de aeroporto inválido.')
         self.routes = sorted(routes)
-        self.calendar_tasks=[]
-        for (a,b),stays in routes.items():
-            for _,group in groupby(enumerate(sorted(stays)),lambda v:v[1]-v[0]):
-                days=[v[1] for v in group];self.calendar_tasks.append((a,b,min(days),max(days)))
-        self.calendar_tasks.sort(key=lambda v:sha256(':'.join(map(str,v)).encode()).digest())
+        # The durable cursor addresses one route and one duration. Adjacent
+        # durations may share browser pages without losing their own top five.
+        self.calendar_tasks=[(a,b,n,n) for (a,b),stays in routes.items() for n in sorted(stays)]
+        self.calendar_tasks.sort(key=lambda v:(sha256(f'{v[0]}:{v[1]}'.encode()).digest(),v[2]))
         self.lanes = [(a,b,n) for (a,b),stays in routes.items() for n in sorted(stays)]
         # Hash ordering distributes all regions and lengths through every batch.
         self.lanes.sort(key=lambda v:sha256(f'{v[0]}:{v[1]}:{v[2]}'.encode()).digest())
@@ -63,7 +66,20 @@ class Planner:
         while gcd(step,self.days)!=1:
             step+=1
         self.step=step
-        self.fingerprint=sha256(json.dumps({'calendar_plan':'browser-v1','lanes':self.lanes,'months':horizon,'stops':settings['max_stops']},sort_keys=True).encode()).hexdigest()
+        self.fingerprint=sha256(json.dumps({'calendar_plan':'browser-v2-top5-per-stay','lanes':self.lanes,'months':horizon,'stops':settings['max_stops']},sort_keys=True).encode()).hexdigest()
+
+    def calendar_batch(self,cursor:int,budget:int,max_tasks:int|None=None):
+        """Largest contiguous group that leaves room for every selected detail."""
+        index=cursor%len(self.calendar_tasks)
+        available=min(len(self.calendar_tasks)-index,max_tasks if max_tasks is not None else len(self.calendar_tasks))
+        first=self.calendar_tasks[index];batch=None
+        for count in range(1,available+1):
+            task=self.calendar_tasks[index+count-1]
+            if task[:2]!=first[:2] or task[2]!=first[2]+count-1:break
+            reserve=min(CALENDAR_DETAILS_PER_STAY,self.days)*count
+            if calendar_calls(self.days,count)+reserve>budget:break
+            batch=(first[0],first[1],first[2],task[2])
+        return batch
 
     def at(self,index:int) -> Search:
         index %= self.total

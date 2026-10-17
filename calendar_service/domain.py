@@ -1,11 +1,11 @@
 """Validated calendar contracts and parsers. No network or browser dependency."""
 from dataclasses import dataclass,asdict,field
 from datetime import date,datetime,timedelta,timezone
-from math import ceil,isfinite
+from math import isfinite
 import base64
 import json
 import re
-from worker.planner import Search,ORIGINS,months_after
+from worker.planner import Search,ORIGINS,months_after,calendar_calls,CALENDAR_DETAILS_PER_STAY
 
 class CalendarUnavailable(RuntimeError):pass
 class CalendarBlocked(CalendarUnavailable):pass
@@ -42,7 +42,10 @@ class CalendarQuery:
     @property
     def days(self):return (self.departure_end-self.departure_start).days+1
     @property
-    def estimated_calls(self):return ceil(self.days/60)*(self.max_days-self.min_days+2)
+    def estimated_calls(self):return calendar_calls(self.days,self.max_days-self.min_days+1)
+
+    @property
+    def detail_reserve(self):return min(CALENDAR_DETAILS_PER_STAY,self.days)*(self.max_days-self.min_days+1)
 
 @dataclass(frozen=True)
 class CalendarPrice:
@@ -123,3 +126,15 @@ def parse_calendar(text,origin,destination,start,end,stay):
     return [CalendarPrice(q,p) for q,p in entries.items()]
 
 def best_candidates(entries,limit=3):return sorted(entries,key=lambda x:(x.price,x.query.departure))[:limit]
+
+def best_candidates_per_stay(entries,limit=CALENDAR_DETAILS_PER_STAY):
+    """Pick distinct dates across the entire capture, independently per stay."""
+    unique={}
+    for entry in entries:
+        if entry.query not in unique or entry.price<unique[entry.query].price:unique[entry.query]=entry
+    groups={}
+    for entry in unique.values():
+        q=entry.query;key=(q.origin,q.destination,(q.returning-q.departure).days)
+        groups.setdefault(key,[]).append(entry)
+    selected=[entry for group in groups.values() for entry in best_candidates(group,limit)]
+    return sorted(selected,key=lambda x:(x.price,x.query.origin,x.query.destination,x.query.departure,x.query.returning))
