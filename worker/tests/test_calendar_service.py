@@ -38,3 +38,22 @@ class CalendarContextTests(unittest.TestCase):
   with self.assertRaises(CalendarUnavailable):rpc_range(request(),q)
   settings[13][0]=leg('GRU','MIA');settings[6]=[2,0,0,0]
   with self.assertRaises(CalendarUnavailable):rpc_range(request(),q)
+
+class QueuedCaptureTests(unittest.TestCase):
+ def test_queued_prices_are_forwarded_for_detailed_validation(self):
+  from calendar_service.jobs import process_queued
+  today=date.today();q=CalendarQuery('GRU','MIA',today+timedelta(days=1),today+timedelta(days=2),7,7,0)
+  class Store:
+   def __init__(self):self.updated={}
+   def request(self,*args):return [{'id':'job','user_id':'owner','status':'queued','request':q.json()}]
+   def patch(self,table,id,data):self.updated.update(data)
+  class Engine:
+   def capture(self,query,**kwargs):
+    self.budget=kwargs['max_search_calls']
+    return CalendarCapture(query,[CalendarPrice(Search('GRU','MIA',q.departure_start,q.departure_start+timedelta(days=7)),3000)],search_calls=2,calendar_requests=1)
+  store=Store();engine=Engine();result=process_queued(store,engine,'run',5)
+  self.assertEqual(len(result['candidates']),1)
+  self.assertEqual(result['candidates'][0].origin,'GRU')
+  self.assertEqual(result['candidate_stops'][result['candidates'][0]],0)
+  self.assertEqual(engine.budget,2,'reserva orçamento para validar as melhores datas')
+  self.assertEqual(store.updated['status'],'completed')

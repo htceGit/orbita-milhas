@@ -45,7 +45,7 @@ Os metadados incluem `priced_combinations`, `total_combinations`, `search_calls`
 
 O gráfico nativo usa duração fixa. A API reúne o intervalo solicitado em janelas de até 60 dias; não transforma uma chamada HTTP à nossa API em uma única chamada ao Google. Para 182 datas e 14 permanências, estima-se inicialmente 60 chamadas de pesquisa por rota, mais tentativas limitadas de recuperação. O worker desconta o custo real do orçamento da rodada, incluindo tentativas que falharam. Arquivos estáticos não são consultas de pesquisa.
 
-A captura não confirma companhia, bagagem, disponibilidade de resgate ou preço final de emissão. As melhores datas seguem para `worker/provider.py`, que identifica a companhia e confirma o preço da consulta detalhada antes de publicar uma oferta no portal. Projeções de milhas ficam restritas à identificação LATAM, como simulação.
+A captura não confirma companhia, bagagem, disponibilidade de resgate ou preço final de emissão. As melhores datas, inclusive dos pedidos administrativos, seguem para `worker/provider.py` com orçamento reservado e o limite de conexões pedido, que identifica a companhia e confirma o preço da consulta detalhada antes de publicar uma oferta no portal. Projeções de milhas ficam restritas à identificação LATAM, como simulação.
 
 ## API síncrona opcional
 

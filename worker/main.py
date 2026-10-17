@@ -67,7 +67,7 @@ def run(store,search=bounded_search,clock=monotonic,calendar_search=None):
     run=store.request('scan_runs','POST',{'total_combinations':planner.total,'provider':'orbita_browser_calendar' if calendar_active else 'fast_flights','message':'Calendário para descobrir datas; consulta detalhada para confirmar tarifa e companhia.'})[0]
     attempts=found=errors=consecutive=calendar_queries=calendar_entries=detail_queries=calendar_search_calls=calendar_routes=calendar_errors=0
     calendar_status='pending' if calendar_active else 'disabled'
-    checked=set();started=clock();reason='';seen=set();calendar_partial=False
+    checked=set();started=clock();reason='';seen=set();calendar_partial=False;pending_candidates=[];pending_stops={}
     proxy=os.environ.get('FLIGHTS_PROXY') or None
     def metrics():
         return {'queries_attempted':attempts,'offers_found':found,'errors_count':errors,
@@ -85,15 +85,15 @@ def run(store,search=bounded_search,clock=monotonic,calendar_search=None):
             queued=process_queued(store,engine,run['id'],budget,proxy)
             attempts+=queued['search_calls'];calendar_search_calls+=queued['search_calls'];calendar_queries+=queued['calendars'];calendar_entries+=queued['entries'];calendar_routes+=queued['routes'];errors+=queued['errors']
             if queued['routes']:calendar_status='available'
-            calendar_partial=bool(queued['errors'])
+            calendar_partial=bool(queued['errors']);pending_candidates=queued['candidates'];pending_stops=queued['candidate_stops']
             if queued['search_calls']:checkpoint(True)
         while attempts<budget:
             if clock()-started>3*3600:
                 reason='Limite de 3 horas; a fila será retomada.';break
-            candidates=[]
+            candidates=pending_candidates[:3];pending_candidates=pending_candidates[3:]
             task=planner.calendar_tasks[calendar_cursor%len(planner.calendar_tasks)]
             calendar_query=CalendarQuery(task[0],task[1],planner.today+timedelta(days=1),planner.today+timedelta(days=planner.days),task[2],task[3],settings['max_stops'])
-            if calendar_active and calendar_query.estimated_calls+1<=budget-attempts:
+            if not candidates and calendar_active and calendar_query.estimated_calls+1<=budget-attempts:
                 try:
                     capture=calendar_search(*task[:2],calendar_query.departure_start,calendar_query.departure_end,*task[2:],settings['max_stops'],proxy,budget-attempts-1)
                 except Exception as exc:
@@ -119,7 +119,7 @@ def run(store,search=bounded_search,clock=monotonic,calendar_search=None):
                 if query in seen:continue
                 seen.add(query);attempts+=1;detail_queries+=1
                 try:
-                    offer=search(query,planner.destinations[query.destination],settings['max_stops'],proxy)
+                    offer=search(query,planner.destinations.get(query.destination,{'city':query.destination}),pending_stops.get(query,settings['max_stops']),proxy)
                     checked.add(query);consecutive=0
                 except Exception as exc:
                     errors+=1;consecutive+=1;offer=None
