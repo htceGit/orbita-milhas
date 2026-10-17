@@ -16,9 +16,15 @@ def calendar_rpc(url):
     return parsed.hostname=='www.google.com' and 'FlightsFrontendService/GetCalendar' in parsed.path
 
 
-def rpc_range(request):
+def rpc_range(request,expected=None):
     try:
         form=parse_qs(request.post_data or '');outer=json.loads(form['f.req'][0]);inner=json.loads(outer[1])
+        if expected:
+            settings=inner[1];legs=settings[13]
+            source=lambda leg:leg[0][0][0][0]
+            destination=lambda leg:leg[1][0][0][0]
+            if settings[2]!=1 or settings[5]!=1 or settings[6]!=[1,0,0,0] or len(legs)!=2 or source(legs[0])!=expected.origin or destination(legs[0])!=expected.destination or source(legs[1])!=expected.destination or destination(legs[1])!=expected.origin or any(leg[3]!=expected.max_stops+1 for leg in legs):
+                raise ValueError('Contexto da pesquisa divergente')
         from datetime import date
         return date.fromisoformat(inner[2][0]),date.fromisoformat(inner[2][1]),inner[4]
     except (ValueError,KeyError,IndexError,TypeError):raise CalendarUnavailable('Formato de requisição do calendário mudou.') from None
@@ -56,7 +62,7 @@ class BrowserCalendarEngine:
 
     def capture(self,query:CalendarQuery,max_search_calls=None,proxy=None,timeout_seconds=240):
         query.validate();self._start(proxy)
-        capture=CalendarCapture(query);values={};visited=set();started=monotonic()
+        capture=CalendarCapture(query);values={};started=monotonic()
         budget=max_search_calls or query.estimated_calls+2*ceil(query.days/60)
         context=self.browser.new_context(locale='en-US',timezone_id='America/Sao_Paulo',viewport={'width':1280,'height':900})
         page=context.new_page();page.set_default_timeout(20000)
@@ -70,11 +76,10 @@ class BrowserCalendarEngine:
             response=waiting.value
             if response.status in (403,429):raise CalendarBlocked('O Google limitou a captura. Aguarde a próxima rodada.')
             if response.status!=200:raise CalendarUnavailable(f'Calendário HTTP {response.status}')
-            first,last,durations=rpc_range(response.request)
+            first,last,durations=rpc_range(response.request,query)
             if durations!=[stay,stay]:raise CalendarUnavailable('A duração retornada difere da duração solicitada.')
             for entry in parse_calendar(response.text(),query.origin,query.destination,query.departure_start,query.departure_end,stay):
                 values[entry.query]=entry
-            visited.add((stay,first,last))
             return first,last
         try:
             guard();capture.search_calls+=1

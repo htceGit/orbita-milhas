@@ -12,7 +12,7 @@ def capture_record(capture,run_id=None,user_id=None):
     body=capture.json();entries=body.pop('entries')
     encoded=base64.b64encode(gzip.compress(json.dumps(entries,separators=(',',':')).encode(),mtime=0)).decode()
     return {'user_id':user_id,'run_id':run_id,'request':capture.request.json(),'cache_key':cache_key(capture.request),
-        'status':capture.status,'result':{**body,'entries':entries[:100]},'entries_gzip':encoded,
+        'status':capture.status,'result':body,'entries_gzip':encoded,
         'error':capture.note or None,'finished_at':datetime.now(timezone.utc).isoformat(),
         'expires_at':(datetime.now(timezone.utc)+timedelta(hours=4)).isoformat()}
 

@@ -3,6 +3,10 @@ from datetime import date,timedelta
 from calendar_service.domain import CalendarQuery,CalendarCapture,CalendarPrice,price_currency
 from calendar_service.jobs import capture_record
 from worker.planner import Search
+from calendar_service.browser import rpc_range
+from calendar_service.domain import CalendarUnavailable
+from types import SimpleNamespace
+from urllib.parse import urlencode
 
 class CalendarServiceTests(unittest.TestCase):
  def test_validates_dates_origins_bounds_and_unknown_fields(self):
@@ -22,3 +26,15 @@ class CalendarServiceTests(unittest.TestCase):
   decoded=json.loads(gzip.decompress(base64.b64decode(record['entries_gzip'])))
   self.assertEqual(len(decoded),3);self.assertEqual(decoded[0]['currency'],'BRL')
   self.assertNotIn('token',json.dumps(record));self.assertEqual(len(record['cache_key']),64)
+
+class CalendarContextTests(unittest.TestCase):
+ def test_rejects_calendar_from_different_route_or_passenger_count(self):
+  q=CalendarQuery('GRU','MIA',date(2026,11,1),date(2026,11,15),7,7)
+  def leg(a,b):return [[[[a,0]]],[[[b,0]]],None,3]
+  settings=[None]*19;settings[2]=1;settings[5]=1;settings[6]=[1,0,0,0];settings[13]=[leg('GRU','MIA'),leg('MIA','GRU')]
+  def request():return SimpleNamespace(post_data=urlencode({'f.req':json.dumps([None,json.dumps([None,settings,['2026-11-01','2026-12-30'],None,[7,7]])])}))
+  self.assertEqual(rpc_range(request(),q)[2],[7,7])
+  settings[13][0]=leg('GRU','JFK')
+  with self.assertRaises(CalendarUnavailable):rpc_range(request(),q)
+  settings[13][0]=leg('GRU','MIA');settings[6]=[2,0,0,0]
+  with self.assertRaises(CalendarUnavailable):rpc_range(request(),q)

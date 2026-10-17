@@ -86,6 +86,7 @@ def run(store,search=bounded_search,clock=monotonic,calendar_search=None):
             attempts+=queued['search_calls'];calendar_search_calls+=queued['search_calls'];calendar_queries+=queued['calendars'];calendar_entries+=queued['entries'];calendar_routes+=queued['routes'];errors+=queued['errors']
             if queued['routes']:calendar_status='available'
             calendar_partial=bool(queued['errors'])
+            if queued['search_calls']:checkpoint(True)
         while attempts<budget:
             if clock()-started>3*3600:
                 reason='Limite de 3 horas; a fila será retomada.';break
