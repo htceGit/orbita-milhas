@@ -10,7 +10,7 @@ from urllib.error import HTTPError,URLError
 REPOSITORY='htceGit/orbita-milhas'
 ENVIRONMENT='scanner-pause-15m'
 
-def dispatch_next(token,repository,ref,opener=urlopen,pause=sleep):
+def dispatch_next(token,repository,ref,opener=urlopen,pause=sleep,verify_only=False):
     if repository!=REPOSITORY or ref!='refs/heads/main':raise ValueError('Continuidade permitida apenas no repositório e branch principais.')
     if not token:raise ValueError('Identidade temporária do job ausente.')
     headers={'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28','Content-Type':'application/json','User-Agent':'orbita-session-continuation'}
@@ -19,11 +19,15 @@ def dispatch_next(token,repository,ref,opener=urlopen,pause=sleep):
         with opener(Request(base+'/environments/'+ENVIRONMENT,headers=headers),timeout=30) as response:environment=json.load(response)
     except HTTPError as exc:
         if exc.code!=403:raise
+        print('Verificando a regra de espera pelos metadados públicos do repositório.',flush=True)
         # The public wait-timer metadata needs no secret or extra permissions.
         public_headers={key:value for key,value in headers.items() if key!='Authorization'}
         with opener(Request(base+'/environments/'+ENVIRONMENT,headers=public_headers),timeout=30) as response:environment=json.load(response)
     if not any(rule.get('type')=='wait_timer' and rule.get('wait_timer')==15 for rule in environment.get('protection_rules',[])):
         raise RuntimeError('Pausa nativa de 15 minutos ausente; continuidade bloqueada para evitar repetições sem espera.')
+    if verify_only:
+        print('Configuração de continuidade validada: espera nativa de 15 minutos, sem aprovação manual.',flush=True)
+        return
     body=json.dumps({'ref':'main','inputs':{'query_limit':'0','mode':'scan','trigger_source':'continuation'}}).encode()
     for attempt in range(3):
         try:
@@ -37,4 +41,7 @@ def dispatch_next(token,repository,ref,opener=urlopen,pause=sleep):
             if attempt==2:raise RuntimeError('GitHub indisponível ao solicitar a próxima sessão.') from None
         pause(2**attempt)
 
-if __name__=='__main__':dispatch_next(os.environ.get('GH_TOKEN',''),os.environ.get('GITHUB_REPOSITORY',''),os.environ.get('GITHUB_REF',''))
+if __name__=='__main__':
+    import argparse
+    parser=argparse.ArgumentParser();parser.add_argument('--check',action='store_true');args=parser.parse_args()
+    dispatch_next(os.environ.get('GH_TOKEN',''),os.environ.get('GITHUB_REPOSITORY',''),os.environ.get('GITHUB_REF',''),verify_only=args.check)

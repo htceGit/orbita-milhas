@@ -5,6 +5,19 @@ on:
 permissions:
   contents: read
 jobs:
+  continuation:
+    name: Verificar configuração da continuidade
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verificar temporizador com a identidade real do job
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -m worker.dispatch_next --check
   test:
     runs-on: ubuntu-latest
     steps:
