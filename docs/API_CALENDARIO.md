@@ -27,7 +27,7 @@ Para solicitar uma captura, envie POST:
 
 As datas são exemplos; devem estar entre amanhã e seis meses à frente. Origens aceitas: CWB, JOI, NVT, FLN, VCP e GRU. Destino: aeroporto IATA. Sempre ida e volta, econômica, um adulto, BRL. Permanência de 1–60 dias e 0–2 conexões. Campos desconhecidos são rejeitados.
 
-Criação de pedidos está restrita à administração. O retorno sem cache é HTTP 202 com `job_id`, `status: queued` e a informação de processamento na próxima rodada do motor, programada a cada quatro horas. No cache completo de quatro horas, retorna HTTP 200 com `cached: true`. Há limite de um pedido por minuto e uma captura pendente por usuário. A fila é durável no Supabase; o navegador roda no GitHub Actions, sem contratação de servidor adicional.
+Criação de pedidos está restrita à administração. O retorno sem cache é HTTP 202 com `job_id`, `status: queued` e a informação de processamento na próxima rodada do motor, com pausa mínima de 15 minutos após cada término. No cache completo de quatro horas, retorna HTTP 200 com `cached: true`. Há limite de um pedido por minuto e uma captura pendente por usuário. A fila é durável no Supabase; o navegador roda no GitHub Actions, sem contratação de servidor adicional.
 
 Para consultar o resultado, envie POST com:
 
@@ -88,6 +88,6 @@ O smoke faz uma captura real pequena via HTTP, verifica recusa sem autenticaçã
 
 ## Seleção das melhores datas
 
-O worker seleciona até **cinco pares de datas distintos para cada origem × destino × permanência** depois de reunir todas as janelas da captura. Uma captura de 7–20 dias pode gerar até 70 consultas detalhadas. As cinco vagas são para o período inteiro de cada duração, não para cada janela. Uma captura parcial só permite ordenar os preços já obtidos; não confirma que sejam os cinco menores de todo o horizonte.
+O worker seleciona até **dois pares de datas distintos para cada origem × destino × permanência** depois de reunir todas as janelas da captura. Uma captura de 7–20 dias pode gerar até 28 consultas detalhadas. As duas vagas são para o período inteiro de cada duração, não para cada janela. Uma captura parcial só permite ordenar os preços já obtidos; não confirma que sejam os dois menores de todo o horizonte.
 
 O orçamento da rodada reserva essas consultas antes de iniciar a captura. Pedidos manuais sem saldo suficiente ficam na fila. Nas pesquisas automáticas, o planejador pode agrupar parte das durações e retomar a próxima duração na rodada seguinte. A administração mostra a mesma regra de seleção, mas a presença de um preço no calendário não comprova que a consulta detalhada tenha sido concluída.

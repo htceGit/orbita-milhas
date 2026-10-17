@@ -15,7 +15,7 @@ export const destinations=[
  ['LIS','Lisboa','Portugal','Europa'],['MAD','Madri','Espanha','Europa'],['BCN','Barcelona','Espanha','Europa'],['CDG','Paris','França','Europa'],['LHR','Londres','Reino Unido','Europa'],['FCO','Roma','Itália','Europa'],['MXP','Milão','Itália','Europa'],['FRA','Frankfurt','Alemanha','Europa'],
  ['NRT','Tóquio','Japão','Ásia'],['ICN','Seul','Coreia do Sul','Ásia'],['BKK','Bangkok','Tailândia','Ásia']
 ].map(([code,city,country,region])=>({code,city,country,region,enabled:!['NRT','ICN','BKK'].includes(code)}));
-export const defaultSettings={id:1,enabled:true,origins:origins.map(o=>o[0]),destinations,min_days:7,max_days:20,horizon_months:6,query_budget:600,search_mode:'rolling',search_strategy:'hybrid',max_stops:2};
+export const defaultSettings={id:1,enabled:true,origins:origins.map(o=>o[0]),destinations,min_days:7,max_days:20,horizon_months:6,query_budget:1000,search_mode:'rolling',search_strategy:'hybrid',max_stops:2};
 export function addDays(offset){const d=new Date();d.setDate(d.getDate()+offset);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
 export const demoOffers=[
  ['MIA','Miami','Estados Unidos','EUA','FLN',3290,28,13,1,'miami'],
@@ -31,7 +31,7 @@ export const demoOffers=[
 export function hasLatamProjection(offer){return Array.isArray(offer.airlines)&&offer.airlines.length===1&&offer.airlines[0]==='LA';}
 export function airlineLabel(offer){return (offer.airline_names?.length?offer.airline_names:offer.airlines?.map(c=>c==='LA'?'LATAM':c)||['Companhia não identificada']).join(' + ');}
 
-export function calendarCandidates(entries,limit=5){
+export function calendarCandidates(entries,limit=2){
   const unique=new Map();
   for(const entry of entries){
     const key=[entry.origin,entry.destination,entry.departure_date,entry.return_date].join('|');

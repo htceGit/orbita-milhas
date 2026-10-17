@@ -1,7 +1,7 @@
-name: Radar Órbita · a cada 4 horas
+name: Radar Órbita · sessões com pausa de 15 minutos
 on:
   schedule:
-    - cron: '17 */4 * * *'
+    - cron: '7,22,37,52 * * * *'
   workflow_dispatch:
     inputs:
       query_limit:
@@ -21,14 +21,23 @@ jobs:
     timeout-minutes: 200
     steps:
       - uses: actions/checkout@v4
+      - name: Verificar pausa entre sessões
+        id: session
+        env:
+          SUPABASE_URL: https://czywkkvwwtcikigbxvty.supabase.co
+        run: python3 -m worker.session_gate
       - uses: actions/setup-python@v5
+        if: steps.session.outputs.run_scan == 'true'
         with:
           python-version: '3.12'
           cache: pip
           cache-dependency-path: worker/requirements.txt
       - run: pip install -r worker/requirements.txt
+        if: steps.session.outputs.run_scan == 'true'
       - run: python -m playwright install --with-deps chromium
+        if: steps.session.outputs.run_scan == 'true'
       - name: Consultar tarifas e salvar oportunidades
+        if: steps.session.outputs.run_scan == 'true'
         env:
           SUPABASE_URL: https://czywkkvwwtcikigbxvty.supabase.co
           CALENDAR_HEADLESS: 'false'

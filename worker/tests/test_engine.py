@@ -30,17 +30,17 @@ class PlannerTests(unittest.TestCase):
   self.assertIn(('FLN','MIA',7,7),p.calendar_tasks)
   self.assertIn(('FLN','MIA',26,26),p.calendar_tasks)
   self.assertEqual(len(p.calendar_tasks),30)
- def test_calendar_batch_reserves_five_details_per_duration_and_resumes(self):
+ def test_calendar_batch_reserves_two_details_per_duration_and_resumes(self):
   p=Planner(config(),[],date(2026,10,17))
-  self.assertIsNone(p.calendar_batch(0,12))
-  self.assertEqual(p.calendar_batch(0,13)[2:],(7,7))
-  self.assertEqual(p.calendar_batch(0,130)[2:],(7,20))
-  first=p.calendar_batch(0,80)
+  self.assertIsNone(p.calendar_batch(0,9))
+  self.assertEqual(p.calendar_batch(0,10)[2:],(7,7))
+  self.assertEqual(p.calendar_batch(0,88)[2:],(7,20))
+  first=p.calendar_batch(0,52)
   self.assertEqual(first[2:],(7,14))
-  following=p.calendar_batch(8,80)
+  following=p.calendar_batch(8,52)
   self.assertEqual(following[2:],(15,20))
   self.assertEqual(first[:2],following[:2])
-  self.assertEqual(p.calendar_batch(8,130,max_tasks=2)[2:],(15,16))
+  self.assertEqual(p.calendar_batch(8,88,max_tasks=2)[2:],(15,16))
  def test_removed_origins_cannot_reenter_via_monitor(self):
   m={'origin':'IGU','destination':'MIA','min_days':7,'max_days':20,'enabled':True}
   self.assertNotIn(('IGU','MIA'),Planner(config(),[m],date.today()).routes)

@@ -9,13 +9,13 @@ test('a simulação inclui custo das milhas e taxas, sem inventar uma cotação'
  assert.equal(estimate(100,20,350).miles,0);
 });
 
-test('a seleção de calendário mantém cinco datas distintas por permanência',()=>{
+test('a seleção de calendário mantém duas datas distintas por permanência',()=>{
  const entries=[7,10].flatMap(stay_days=>Array.from({length:7},(_,i)=>({origin:'FLN',destination:'MIA',stay_days,departure_date:`2026-11-${String(i+1).padStart(2,'0')}`,return_date:`2026-11-${String(i+1+stay_days).padStart(2,'0')}`,price_brl:5000-i*100})));
  entries.push({...entries.at(-1),price_brl:3840});
  const selected=calendarCandidates(entries);
- assert.equal(selected.length,10);
- for(const days of [7,10])assert.equal(selected.filter(e=>e.stay_days===days).length,5);
- assert.equal(new Set(selected.map(e=>e.departure_date+'|'+e.return_date)).size,10);
+ assert.equal(selected.length,4);
+ for(const days of [7,10])assert.equal(selected.filter(e=>e.stay_days===days).length,2);
+ assert.equal(new Set(selected.map(e=>e.departure_date+'|'+e.return_date)).size,4);
  assert.equal(selected[0].price_brl,3840);
 });
 test('filtros combinam região, origem, destino, preço e intervalo inclusivo',()=>{

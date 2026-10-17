@@ -1,4 +1,4 @@
-"""Run via python -m worker.main. GitHub Actions schedules this every 4 hours."""
+"""Resumable scanner. Scheduled sessions are gated by a minimum 15-minute rest."""
 from datetime import datetime,timezone,timedelta
 from zoneinfo import ZoneInfo
 from multiprocessing import get_context
@@ -100,7 +100,7 @@ def run(store,search=bounded_search,clock=monotonic,calendar_search=None):
                         reason='Todos os calendários da fila foram percorridos nesta rodada.';planned_stop=True;break
                 task=planner.calendar_batch(calendar_cursor,budget-attempts,len(planner.calendar_tasks)-calendar_tasks_attempted) if calendar_active else None
                 if calendar_active and task is None:
-                    reason='Saldo reservado: a próxima rodada retoma o próximo calendário com até cinco detalhes por permanência.';planned_stop=True;break
+                    reason='Saldo reservado: a próxima sessão retoma o próximo calendário com até dois detalhes por permanência.';planned_stop=True;break
             if not candidates and calendar_active:
                 calendar_query=CalendarQuery(task[0],task[1],planner.today+timedelta(days=1),planner.today+timedelta(days=planner.days),task[2],task[3],settings['max_stops'])
                 try:

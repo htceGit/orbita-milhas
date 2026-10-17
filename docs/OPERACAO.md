@@ -26,7 +26,7 @@ Não desative a confirmação para contornar limites de e-mail: ela protege a re
 
 ## Execuções
 
-Em **GitHub → Actions → Radar Órbita · a cada 4 horas → Run workflow**, faça uma execução manual quando precisar. Não há chave Supabase para copiar: a função já aceita apenas a identidade OIDC desse workflow na branch principal.
+Em **GitHub → Actions → Radar Órbita · sessões com pausa de 15 minutos → Run workflow**, faça uma execução manual quando precisar. Não há chave Supabase para copiar: a função já aceita apenas a identidade OIDC desse workflow na branch principal.
 
 O cron é aproximado e deve ser acompanhado. Falhas de parsing/bloqueios do Google aparecem como falhas de consulta. O coletor próprio abre um navegador isolado para descobrir datas no calendário. Em erros, preserva os preços obtidos e registra captura parcial. Três falhas consecutivas de calendário ou um bloqueio explícito acionam a fila detalhada pelo restante da rodada. Oito falhas consecutivas da busca detalhada interrompem a rodada. O campo opcional `query_limit` na execução manual limita as chamadas para testes; zero utiliza o orçamento do portal. Um timeout do job ou cancelamento forçado pode deixar uma execução como `running`; o cursor continua salvo. Confira o Actions e não trate esse registro como uma rodada concluída.
 
@@ -57,3 +57,9 @@ A Administração inclui **Calendário próprio**: solicite uma rota, datas de s
 O worker processa pedidos administrativos antes da descoberta automática, respeitando o mesmo orçamento global. Uma única captura por usuário pode permanecer na fila ou em processamento. Execuções interrompidas são detectadas na próxima rodada e marcadas como falhas. Os dados brutos de sessão, cookies e headers do Google não são armazenados. Preços completos são comprimidos; o navegador recebe apenas os resumos necessários ou os dados pedidos à API autenticada.
 
 Leia [API_CALENDARIO.md](API_CALENDARIO.md) para contratos, autenticação, execução local, Docker e testes.
+
+## Ritmo das sessões
+
+O motor seleciona até dois detalhes por origem/destino/permanência e tem teto padrão de 1.000 chamadas por sessão. O workflow verifica a pausa antes de instalar dependências: sessões não se sobrepõem, e outra só é liberada após pelo menos 15 minutos do término da última. O cron faz verificações a cada 15 minutos, portanto a pausa efetiva pode superar 15 minutos. Falhas repetidas continuam interrompendo a captura.
+
+Aumentar a frequência exige acompanhar uso real de Edge Functions, tamanho do banco e tráfego no painel Supabase. O Free inclui 500 mil invocações de Edge Functions/mês, 500 MB de banco e 5 GB de egress; isso não garante que qualquer frequência de busca caiba gratuitamente. Não foi contratado plano pago nem serviço adicional. Ver https://supabase.com/pricing.

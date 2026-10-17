@@ -26,23 +26,23 @@ class CalendarTests(unittest.TestCase):
   values=parse_calendar(text,'GRU','MIA',start,end,7)
   self.assertEqual([v.price for v in best_candidates(values)],[2500,3000])
   self.assertEqual(best_candidates(values,1)[0].query.departure,date(2026,11,3))
- def test_five_distinct_cheapest_dates_for_each_route_and_duration(self):
+ def test_two_distinct_cheapest_dates_for_each_route_and_duration(self):
   entries=[];start=date(2026,10,18)
   for origin in ['FLN','GRU']:
    for stay in [10,11]:
     for offset in range(7):
      departure=start+timedelta(days=offset*25)
      entries.append(CalendarPrice(Search(origin,'MIA',departure,departure+timedelta(days=stay)),5000-offset*100+stay))
-  # Repeated dates from overlapping windows cannot occupy two top-five slots.
+  # Repeated dates from overlapping windows cannot occupy two selected slots.
   entries.append(CalendarPrice(entries[-1].query,1000))
   selected=best_candidates_per_stay(entries)
-  self.assertEqual(len(selected),20)
-  self.assertEqual(len({v.query for v in selected}),20)
+  self.assertEqual(len(selected),8)
+  self.assertEqual(len({v.query for v in selected}),8)
   for origin in ['FLN','GRU']:
    for stay in [10,11]:
     group=[v for v in selected if v.query.origin==origin and (v.query.returning-v.query.departure).days==stay]
-    self.assertEqual(len(group),5)
-    self.assertEqual({(v.query.departure-start).days for v in group},{50,75,100,125,150})
+    self.assertEqual(len(group),2)
+    self.assertEqual({(v.query.departure-start).days for v in group},{125,150})
   self.assertEqual(min(v.price for v in selected),1000)
 
 class FakeStore:
@@ -82,33 +82,33 @@ class HybridTests(unittest.TestCase):
    return CalendarCapture(CalendarQuery(a,b,start,end,low,high,stops),entries,search_calls=1,calendar_requests=1)
   def details(query,*a):calls.append(query);return None
   run(store,search=details,calendar_search=calendar)
-  self.assertEqual(store.result['queries_attempted'],4)
+  self.assertEqual(store.result['queries_attempted'],3)
   self.assertEqual(store.result['calendar_entries'],3)
-  self.assertEqual(store.result['detail_dates_checked'],3)
+  self.assertEqual(store.result['detail_dates_checked'],2)
   self.assertEqual(store.saved,[])
-  self.assertEqual(calls[0].departure,min(q.departure for q in calls)+timedelta(days=1))
+  self.assertEqual(calls[1].departure,calls[0].departure+timedelta(days=1))
 
  @patch.dict(os.environ,{'QUERY_DELAY_SECONDS':'0','QUERY_BUDGET_OVERRIDE':'0'})
- def test_validates_only_five_cheapest_per_duration_then_stops(self):
+ def test_validates_only_two_cheapest_per_duration_then_stops(self):
   store=FakeStore(60);store.settings['max_days']=8;calls=[]
   def calendar(a,b,start,end,low,high,stops,*args):
    query=CalendarQuery(a,b,start,end,low,high,stops)
    entries=[CalendarPrice(Search(a,b,start+timedelta(days=i),start+timedelta(days=i+stay)),4000-i*100+stay) for stay in range(low,high+1) for i in range(7)]
-   self.assertEqual(args[-1],50,'reserves all ten detailed queries')
+   self.assertEqual(args[-1],56,'reserves all four detailed queries')
    return CalendarCapture(query,entries,search_calls=query.estimated_calls,calendar_requests=2)
   def details(query,*args):calls.append(query);return {'price_brl':3000}
   run(store,search=details,calendar_search=calendar)
-  self.assertEqual(store.result['queries_attempted'],13)
+  self.assertEqual(store.result['queries_attempted'],7)
   self.assertEqual(store.result['calendar_entries'],14)
-  self.assertEqual(store.result['detail_queries'],10)
-  self.assertEqual(len(store.saved),10)
+  self.assertEqual(store.result['detail_queries'],4)
+  self.assertEqual(len(store.saved),4)
   for stay in [7,8]:
-   self.assertEqual(len([q for q in calls if (q.returning-q.departure).days==stay]),5)
+   self.assertEqual(len([q for q in calls if (q.returning-q.departure).days==stay]),2)
   self.assertEqual(store.result['status'],'completed')
 
  @patch.dict(os.environ,{'QUERY_DELAY_SECONDS':'0','QUERY_BUDGET_OVERRIDE':'0'})
  def test_small_budget_resumes_next_duration_without_losing_selected_dates(self):
-  store=FakeStore(7);store.settings['max_days']=8;calls=[];captures=[]
+  store=FakeStore(4);store.settings['max_days']=8;calls=[];captures=[]
   def calendar(a,b,start,end,low,high,stops,*args):
    q=CalendarQuery(a,b,start,end,low,high,stops);captures.append((low,high))
    self.assertEqual(args[-1],2)
@@ -117,10 +117,10 @@ class HybridTests(unittest.TestCase):
   def details(query,*args):calls.append(query);return None
   for _ in range(2):
    run(store,search=details,calendar_search=calendar)
-   self.assertEqual(store.result['queries_attempted'],7)
-   self.assertEqual(store.result['detail_queries'],5)
+   self.assertEqual(store.result['queries_attempted'],4)
+   self.assertEqual(store.result['detail_queries'],2)
   self.assertEqual(captures,[(7,7),(8,8)])
-  self.assertEqual(len(set(calls)),10)
+  self.assertEqual(len(set(calls)),4)
   self.assertEqual(store.state['calendar_cursor'],0)
 
 if __name__=='__main__':unittest.main()

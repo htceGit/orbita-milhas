@@ -73,6 +73,6 @@ Deno.serve(async(req:Request)=>{
   if(recent.data.length)return respond({error:'Aguarde um minuto antes de pedir outra captura.'},429);
   const inserted=await database({},'POST',{user_id:user.id,request,cache_key});
   if(!inserted.ok)return respond({error:inserted.status===409?'Já existe uma captura sua aguardando processamento.':'Não foi possível criar a captura.'},inserted.status===409?409:502);
-  return respond({job_id:inserted.data[0].id,status:'queued',cached:false,processing:'Próxima execução do motor, programada a cada 4 horas.'},202);
+  return respond({job_id:inserted.data[0].id,status:'queued',cached:false,processing:'Próxima sessão disponível do motor, após a pausa mínima de 15 minutos.'},202);
  }catch(error){console.error('Calendar API failure',error instanceof Error?error.name:'Unknown');return respond({error:'Não foi possível processar a requisição.'},400);}
 });

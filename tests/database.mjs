@@ -26,7 +26,7 @@ await assert.rejects(db.query(`insert into public.monitors(user_id,origin,destin
 await assert.rejects(db.query(`insert into public.monitors(user_id,origin,destination) values($1,'GRU','CDG')`,[b]),/Usuário inválido/,'não cria radar para outro usuário');
 await assert.rejects(db.query(`select public.admin_update_member($1,'pro','active',null)`,[a]),/administrativo/,'membro não libera plano');
 await db.exec("update public.scanner_settings set query_budget=1");
-assert.equal((await db.query('select query_budget from public.scanner_settings')).rows[0].query_budget,600,'RLS bloqueia configuração global');
+assert.equal((await db.query('select query_budget from public.scanner_settings')).rows[0].query_budget,1000,'RLS bloqueia configuração global');
 await as(admin);
 await db.query(`select public.admin_update_member($1,'pro','active',null)`,[a]);
 await assert.rejects(db.query(`select public.admin_update_member($1,'pro','suspended',null)`,[admin]),/própria conta/);

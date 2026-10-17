@@ -57,7 +57,7 @@ class QueuedCaptureTests(unittest.TestCase):
   self.assertEqual(result['candidate_stops'][result['candidates'][0]],0)
   self.assertEqual(engine.budget,2,'reserva as duas datas disponíveis no pedido')
   self.assertEqual(store.updated['status'],'completed')
- def test_queue_keeps_five_per_duration_and_reserves_all_pending_details(self):
+ def test_queue_keeps_two_per_duration_and_reserves_all_pending_details(self):
   from calendar_service.jobs import process_queued
   today=date.today();q=CalendarQuery('FLN','MIA',today+timedelta(days=1),today+timedelta(days=7),10,11,2)
   class Store:
@@ -70,10 +70,10 @@ class QueuedCaptureTests(unittest.TestCase):
     self.calls+=1;self.budget=kwargs['max_search_calls']
     entries=[CalendarPrice(Search('FLN','MIA',q.departure_start+timedelta(days=i),q.departure_start+timedelta(days=i+stay)),5000-i*100) for stay in [10,11] for i in range(7)]
     return CalendarCapture(query,entries,search_calls=3,calendar_requests=2)
-  store=Store();engine=Engine();result=process_queued(store,engine,'run',20)
+  store=Store();engine=Engine();result=process_queued(store,engine,'run',12)
   self.assertEqual(engine.calls,1,'second capture stays queued instead of spending the reserved detail budget')
-  self.assertEqual(engine.budget,10)
+  self.assertEqual(engine.budget,8)
   self.assertEqual(result['search_calls'],3)
-  self.assertEqual(len(result['candidates']),10)
+  self.assertEqual(len(result['candidates']),4)
   for stay in [10,11]:
-   self.assertEqual(sum((query.returning-query.departure).days==stay for query in result['candidates']),5)
+   self.assertEqual(sum((query.returning-query.departure).days==stay for query in result['candidates']),2)

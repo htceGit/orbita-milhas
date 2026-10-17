@@ -9,7 +9,7 @@ import json
 import re
 
 ORIGINS = ('CWB','JOI','NVT','FLN','VCP','GRU')
-CALENDAR_DETAILS_PER_STAY = 5
+CALENDAR_DETAILS_PER_STAY = 2
 CALENDAR_WINDOW_DAYS = 60
 
 def calendar_calls(days:int,stays:int) -> int:
@@ -53,7 +53,7 @@ class Planner:
             raise ValueError('Código de aeroporto inválido.')
         self.routes = sorted(routes)
         # The durable cursor addresses one route and one duration. Adjacent
-        # durations may share browser pages without losing their own top five.
+        # Durations share browser pages but keep independent candidate quotas.
         self.calendar_tasks=[(a,b,n,n) for (a,b),stays in routes.items() for n in sorted(stays)]
         self.calendar_tasks.sort(key=lambda v:(sha256(f'{v[0]}:{v[1]}'.encode()).digest(),v[2]))
         self.lanes = [(a,b,n) for (a,b),stays in routes.items() for n in sorted(stays)]
@@ -66,7 +66,7 @@ class Planner:
         while gcd(step,self.days)!=1:
             step+=1
         self.step=step
-        self.fingerprint=sha256(json.dumps({'calendar_plan':'browser-v2-top5-per-stay','lanes':self.lanes,'months':horizon,'stops':settings['max_stops']},sort_keys=True).encode()).hexdigest()
+        self.fingerprint=sha256(json.dumps({'calendar_plan':'browser-v2-per-stay','lanes':self.lanes,'months':horizon,'stops':settings['max_stops']},sort_keys=True).encode()).hexdigest()
 
     def calendar_batch(self,cursor:int,budget:int,max_tasks:int|None=None):
         """Largest contiguous group that leaves room for every selected detail."""

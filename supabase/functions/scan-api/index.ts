@@ -6,7 +6,7 @@ const jwks=createRemoteJWKSet(new URL('https://token.actions.githubusercontent.c
 const base=Deno.env.get('SUPABASE_URL')!+'/rest/v1/';
 const serviceKey=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const response=(value:unknown,status=200)=>new Response(JSON.stringify(value),{status,headers:{'Content-Type':'application/json','Cache-Control':'no-store'}});
-const readTables=new Set(['profiles','scanner_settings','monitors','scanner_state','calendar_jobs']);
+const readTables=new Set(['profiles','scanner_settings','monitors','scanner_state','calendar_jobs','scan_runs']);
 const writeTables=new Set(['offers','fare_history','scan_runs','calendar_jobs']);
 const patchTables=new Set(['scan_runs','scanner_state','calendar_jobs']);
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -33,6 +33,7 @@ Deno.serve(async(req:Request)=>{
    query.offset=String(Math.max(0,Math.floor(Number(params.offset)||0)));
    if(table==='profiles'){query.select='id,plan,pro_until,role';query.status='eq.active';}
    if(table==='calendar_jobs'){query.status='in.(queued,running)';query.order='created_at.asc';query.limit='10';query.select='id,user_id,request,status';}
+   if(table==='scan_runs'){query.order='started_at.desc';query.limit='1';query.offset='0';query.select='status,started_at,finished_at';}
    if(table==='monitors'){query.enabled='eq.true';query.order='created_at.asc';}
    if(table==='scanner_state'||table==='scanner_settings')query.id='eq.1';
   }else if(method==='POST'&&writeTables.has(table)){
