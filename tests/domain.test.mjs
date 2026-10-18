@@ -14,6 +14,14 @@ test('filtros combinam região, origem, destino, preço e intervalo inclusivo',(
  assert.equal(filterOffers(offers,{region:'Europa',origin:'FLN',search:'cdg',maxPrice:3500,departureFrom:'2027-01-01',departureTo:'2027-01-01'}).length,1);
  assert.equal(filterOffers(offers,{region:'Europa',maxPrice:3499}).length,0);
 });
+test('busca pública ignora acentos e combina companhia, conexões e permanência',()=>{
+ const offers=[{city:'Paris',country:'França',origin:'FLN',origin_name:'Florianópolis',destination:'CDG',price_brl:3500,airline_names:['Air France'],stops:0,stay_days:10,trip_type:'round_trip'},{city:'Paris',country:'França',origin:'GRU',destination:'CDG',price_brl:3200,airline_names:['LATAM'],stops:1,stay_days:7,trip_type:'round_trip'},{city:'Paris',country:'França',origin:'GRU',destination:'CDG',price_brl:2000,airline_names:['Air France'],stops:0,stay_days:null,trip_type:'one_way'}];
+ assert.equal(filterOffers(offers,{search:'florianopolis'}).length,1);
+ assert.equal(filterOffers(offers,{search:'franca'}).length,3);
+ assert.equal(filterOffers(offers,{airline:'Air France',direct:true,minStay:7,maxStay:14,trip:'round_trip'}).length,1);
+ assert.equal(filterOffers(offers,{direct:true,trip:'one_way'}).length,1);
+ assert.equal(filterOffers(offers,{minStay:8,maxStay:9}).length,0);
+});
 test('o portal apresenta todas as tarifas válidas e respeita apenas o teto escolhido pelo usuário',()=>{
  const offers=[{destination:'MIA',price_brl:3495,airlines:['LA']},{destination:'LIS',price_brl:4200,airlines:['TP']}];
  assert.ok(offers.every(offerAllowed));assert.equal(filterOffers(offers,{}).length,2);assert.equal(filterOffers(offers,{maxPrice:3500}).length,1);

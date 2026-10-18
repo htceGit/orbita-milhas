@@ -37,8 +37,14 @@ const high=await insertTarifa(3495),low=await insertTarifa(2999.99);
 await db.exec('set role service_role');
 const other=(await db.query(`insert into public.tarifaspromo(origem,destino,data_ida,data_volta,preco,companhia,voos) values('GRU','CDG',${date},${date}+10,4200,'Air France','AF 454') returning id::text`)).rows[0].id;
 await db.exec('reset role');
+await db.query(`insert into public.tarifaspromo(origem,destino,data_ida,data_volta,preco,companhia) values('GRU','MIA',current_date-10,current_date-3,4200,'LATAM')`);
 await db.exec('set role anon');
-await assert.rejects(db.query('select * from public.tarifaspromo'),/permission denied/);
+assert.equal((await db.query('select count(*)::int n from public.tarifaspromo')).rows[0].n,3,'visitante consulta tarifas sem login');
+await assert.rejects(db.query('update public.tarifaspromo set preco=1'),/permission denied/);
+await assert.rejects(db.query('delete from public.tarifaspromo'),/permission denied/);
+await assert.rejects(db.query(`insert into public.tarifaspromo(origem,destino,data_ida,data_volta,preco) values('CWB','MIA',${date},${date}+7,100)`),/permission denied/);
+await assert.rejects(db.query('select * from public.profiles'),/permission denied/);
+await assert.rejects(db.query('select * from private.telegram_settings'),/permission denied/);
 await assert.rejects(db.query('select * from public.tarifaspromo_favorites'),/permission denied/);
 await db.exec('reset role');await as(a);
 assert.equal((await db.query('select count(*)::int n from public.tarifaspromo')).rows[0].n,3,'usuário ativo lê todas as tarifas, inclusive acima dos tetos antigos');
@@ -52,7 +58,7 @@ await as(a);assert.equal((await db.query('select count(*)::int n from public.tar
 for(let i=0;i<3;i++)await db.query("insert into public.monitors(user_id,origin,destination,min_days,max_days) values($1,'CWB',$2,7,20)",[a,['MIA','JFK','LIS'][i]]);
 await assert.rejects(db.query("insert into public.monitors(user_id,origin,destination,min_days,max_days) values($1,'CWB','MAD',7,20)",[a]),/Limite/);
 await db.exec('reset role');await db.query("update public.profiles set status='suspended' where id=$1",[a]);await as(a);
-assert.equal((await db.query('select count(*)::int n from public.tarifaspromo')).rows[0].n,0,'conta suspensa perde acesso mesmo com JWT antigo');
+assert.equal((await db.query('select count(*)::int n from public.tarifaspromo')).rows[0].n,3,'catálogo público continua visível mesmo sem acesso privado');
 assert.equal((await db.query('select count(*)::int n from public.tarifaspromo_favorites')).rows[0].n,0);
 await db.exec('reset role');await db.query("update public.profiles set status='active' where id=$1",[a]);
 // Strict Telegram thresholds: LATAM < 3000; all other/mixed carriers < 2500.
@@ -92,5 +98,5 @@ for(const query of ['select * from private.telegram_settings','select * from pri
 await assert.rejects(db.query('select public.claim_telegram_alert($1,$2)',[alert.id,nonce]),/permission denied/);
 await db.exec('reset role');
 assert.equal((await db.query("select count(*)::int n from pg_tables where schemaname in ('public','private') and rowsecurity=false")).rows[0].n,0);
-console.log('Banco validado: fonte externa, isolamento por login, favoritos, limites Free/Pro, retirada do coletor e alertas Telegram com tetos estritos.');
+console.log('Banco validado: tarifas públicas atuais, escrita de servidor, contas privadas, favoritos isolados e alertas Telegram com tetos estritos.');
 await db.close();

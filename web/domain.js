@@ -8,7 +8,19 @@ export function estimate(price, costPerThousand=20, taxes=350, discount=.275) {
   return {low:price*.70,high:price*.75,miles,target,taxes,costPerThousand};
 }
 export function filterOffers(offers, filters) {
-  return offers.filter(o=>offerAllowed(o)&&(!filters.region||filters.region==='all'||o.region===filters.region)&&(!filters.origin||filters.origin==='all'||o.origin===filters.origin)&&(!filters.search||`${o.city} ${o.destination} ${o.country} ${airlineLabel(o)}`.toLowerCase().includes(filters.search.toLowerCase()))&&(!filters.maxPrice||o.price_brl<=filters.maxPrice)&&(!filters.departureFrom||o.departure_date>=filters.departureFrom)&&(!filters.departureTo||o.departure_date<=filters.departureTo));
+  const fold=value=>String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  return offers.filter(o=>offerAllowed(o)
+    &&(!filters.region||filters.region==='all'||o.region===filters.region)
+    &&(!filters.origin||filters.origin==='all'||o.origin===filters.origin)
+    &&(!filters.search||fold(`${o.city} ${o.destination} ${o.country} ${o.origin_name} ${o.origin} ${airlineLabel(o)}`).includes(fold(filters.search)))
+    &&(!filters.maxPrice||o.price_brl<=filters.maxPrice)
+    &&(!filters.departureFrom||o.departure_date>=filters.departureFrom)
+    &&(!filters.departureTo||o.departure_date<=filters.departureTo)
+    &&(!filters.airline||filters.airline==='all'||airlineLabel(o)===filters.airline)
+    &&(!filters.trip||filters.trip==='all'||o.trip_type===filters.trip)
+    &&(!filters.direct||o.stops===0)
+    &&(!filters.minStay||Number.isInteger(o.stay_days)&&o.stay_days>=filters.minStay)
+    &&(!filters.maxStay||Number.isInteger(o.stay_days)&&o.stay_days<=filters.maxStay));
 }
 export const origins=[['CWB','Curitiba','PR'],['JOI','Joinville','SC'],['NVT','Navegantes','SC'],['FLN','Florianópolis','SC'],['VCP','Campinas','SP'],['GRU','Guarulhos','SP']];
 export const destinations=[

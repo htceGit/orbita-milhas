@@ -3,17 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#7252e8">
-  <meta name="description" content="Órbita: seu radar de tarifas internacionais e planejamento de viagens com milhas. Buscas internacionais contínuas, com pausa mínima de 15 minutos entre sessões.">
+  <meta name="theme-color" content="#f8f9f6">
+  <meta name="description" content="Encontre promoções de passagens internacionais saindo do Brasil. Compare destinos, datas e companhias no Órbita, grátis e sem cadastro.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Órbita · Boas tarifas. Novos destinos.">
+  <meta property="og:description" content="Promoções internacionais em um só lugar. Compare datas e companhias, salve favoritas e planeje sua viagem sem cadastro.">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self'; base-uri 'self'; form-action 'self'; object-src 'none'">
-  <title>Órbita · Seu próximo destino, por menos</title>
+  <title>Órbita · Boas tarifas. Novos destinos.</title>
   <link rel="icon" href="./favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
-  <div id="app"><div class="boot"><img src="./favicon.svg" width="48" height="48" alt="Órbita"><p>Preparando seu próximo destino…</p></div></div>
+  <a class="skip-link" href="#ofertas">Pular para as ofertas</a>
+  <div id="app"><div class="boot"><img src="./favicon.svg" width="48" height="48" alt="Órbita"><p>Encontrando seu próximo destino…</p></div></div>
   <div id="toast" role="status" aria-live="polite"></div>
   <dialog id="modal"></dialog>
+  <noscript><p>Ative o JavaScript para consultar e filtrar as ofertas do Órbita. Não é necessário criar conta.</p></noscript>
   <script type="module" src="./app.js"></script>
 </body>
 </html>

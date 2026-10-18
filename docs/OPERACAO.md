@@ -8,19 +8,19 @@
 
 O workflow do coletor antigo foi desativado; as sessões restantes foram canceladas, seus históricos removidos e seu ambiente de espera excluído. As APIs antigas scan-api e calendar-api retornam HTTP 410 e não executam operações de coleta. Este repositório só publica e verifica o frontend. Alterações no site não alteram o motor externo.
 
-## Contas e acesso
+## Catálogo público e administração
 
-Login, cadastro, confirmação de e-mail e recuperação de senha usam Supabase Auth. A Administração gerencia planos Free/Pro, validade do Pro e suspensão. Usuários não podem promover a própria conta. A reserva administrativa é privada e o administrador é promovido após confirmar o e-mail reservado.
+A navegação é aberta, sem cadastro nem login. A migração `public_promotions_portal` permite SELECT de `tarifaspromo` aos papéis `anon` e `authenticated`, com RLS para tarifas positivas e partida atual/futura em Brasília. Visitantes e usuários autenticados não recebem escrita nessa tabela. O coletor mantém suas permissões de servidor. A view `vw_melhores_ofertas` continua com `security_invoker` e sem acesso anônimo, pois o frontend lê a tabela diretamente.
 
-A tabela de tarifas permite somente leitura por usuários com perfil ativo. A gravação é exclusiva do servidor. A view existente `vw_melhores_ofertas` usa `security_invoker`, respeitando as mesmas permissões. Não use essa view ou uma chave de servidor para contornar o login.
+A entrada `#admin`, acessível pelo rodapé, usa Supabase Auth. Somente perfis administrativos ativos podem carregar a administração. Recuperação de senha e contas existentes foram mantidas. Dados de perfis e configurações privadas não foram liberados junto com as tarifas. Suspender uma conta restringe suas operações privadas; o catálogo continua público.
 
-Favoritos novos ficam em `tarifaspromo_favorites`, vinculados ao usuário e ao ID bigint da tarifa. Favoritos antigos são reaproveitados quando existe correspondência de rota e datas no feed novo. Cada usuário só lê e altera seus próprios dados. Os radares têm limite de 3 no Free e 30 no Pro/admin; servem para destacar tarifas do catálogo, sem controlar o coletor externo.
+Favoritas da experiência pública ficam na chave local `orbita-public-saved`, separada da demonstração. Não há sincronização entre navegadores. Os antigos favoritos em `tarifaspromo_favorites` continuam isolados por usuário, com seus registros preservados. Os dados de preferências, radares e interesse Pro também foram preservados; essas funcionalidades não aparecem no novo portal.
 
 ## Exibição e atualização
 
 Todas as tarifas válidas recebidas para datas atuais/futuras são elegíveis ao catálogo. O preço máximo é escolhido nos filtros. Não há expiração fictícia de oito horas. O site informa a data de atualização recebida e oferece conferência no Google Flights.
 
-O navegador atualiza o feed a cada 60 segundos enquanto a aba está visível, sem formulário/modal em edição. Há atualização manual na área de atualizações e na Administração. A leitura é paginada; a renderização começa com 24 cartões. A presença de tarifas recentes não é uma confirmação de saúde do worker externo.
+O navegador atualiza o feed a cada 60 segundos enquanto a aba está visível, sem formulário/modal em edição. Há atualização manual junto da lista e na Administração. A leitura é paginada; a renderização começa com 24 linhas e oferece mais 24 por ação. Os filtros permanecem na URL. O compartilhamento de uma tarifa usa `?oferta=ID`, abrindo os detalhes quando ela ainda pertence ao catálogo. A presença de tarifas recentes não é uma confirmação de saúde do worker externo.
 
 ## Telegram
 
@@ -38,6 +38,6 @@ Foram retiradas as tabelas do coletor antigo: `offers`, `fare_history`, `favorit
 
 Permanecem as tabelas usadas pelo portal: `profiles`, `preferences`, `monitors`, `pro_interest`, `tarifaspromo` e `tarifaspromo_favorites`; no schema privado, a reserva administrativa e as duas tabelas do Telegram. Schemas e tabelas gerenciados pelo Supabase não são removidos.
 
-## Preparação comercial
+## Experiência atual
 
-O Pro tem liberação administrativa e registro de interesse; não há cobrança ou renovação automática. Configure SMTP próprio antes de abrir os cadastros ao público. Domínio próprio, identificação do operador, contato de privacidade e termos definitivos continuam necessários para o lançamento.
+O portal é gratuito e aberto, sem apresentação de planos ou cadastro público. A publicação usa GitHub Pages. O acesso ao catálogo não depende de SMTP. A administração permanece autenticada e os alertas Telegram mantêm suas regras privadas.

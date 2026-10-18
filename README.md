@@ -1,16 +1,18 @@
 # Órbita · Portal de oportunidades internacionais
 
-Frontend HTML/CSS/JavaScript publicado no [GitHub Pages](https://htcegit.github.io/orbita-milhas/), com login, perfis Free/Pro, favoritos, radares pessoais e administração de usuários no Supabase.
+Portal público de promoções em HTML/CSS/JavaScript, publicado no [GitHub Pages](https://htcegit.github.io/orbita-milhas/). Ofertas em lista, filtros combinados, favoritas locais e compartilhamento de tarifas. Não há cadastro, login obrigatório ou divulgação de planos Pro na experiência pública. A entrada administrativa continua protegida pelo Supabase Auth.
 
 O coletor é um projeto externo operado pelo proprietário no Railway. **Este repositório não contém nem agenda pesquisas de voos.** Os únicos workflows ativos são verificação e publicação do portal.
 
 ## Fonte das tarifas
 
-O portal lê `public.tarifaspromo` usando a sessão Supabase do usuário. A tabela é preenchida pelo coletor com uma chave de servidor. O navegador usa somente a chave pública e não pode inserir, alterar ou excluir tarifas. RLS restringe a leitura a perfis ativos; contas suspensas perdem acesso mesmo com uma sessão anterior.
+O portal lê `public.tarifaspromo` com a chave pública, sem sessão de usuário. RLS permite a visitantes e usuários autenticados somente a leitura de tarifas positivas com partida atual ou futura em Brasília. A gravação continua exclusiva do coletor, com sua chave de servidor. Perfis, favoritos de contas antigas e configurações do Telegram continuam privados. O cliente público é separado do cliente de autenticação administrativa, para que uma sessão antiga não interrompa a consulta pública.
 
-A consulta usa datas futuras ou o dia atual em Brasília. Campos em português são adaptados em `web/tarifas.js`; IDs bigint são recebidos como texto para preservar a precisão. O portal mostra todas as tarifas válidas recebidas, **sem reaplicar os tetos do coletor antigo e sem inventar expiração**. Filtros de preço, origem, região e datas são escolhas do usuário. A leitura percorre páginas de 500 registros, até 10.000 tarifas mais baratas por consulta; o portal informa quando atingir esse limite. A tela mostra inicialmente 24 cartões e oferece “Ver mais”.
+A consulta usa datas futuras ou o dia atual em Brasília. Campos em português são adaptados em `web/tarifas.js`; IDs bigint são recebidos como texto para preservar a precisão. O portal mostra todas as tarifas válidas recebidas, **sem reaplicar os tetos do coletor antigo e sem inventar expiração**. Filtros de preço, origem, destino/país/companhia, região, partida, permanência, tipo de viagem e voos diretos são escolhas do visitante. A busca ignora acentos; filtros ficam na URL e podem ser compartilhados. A leitura percorre páginas de 500 registros, até 10.000 tarifas mais baratas por consulta; o portal informa quando atingir esse limite. A tela mostra inicialmente 24 linhas e oferece “Ver mais”. A ordenação permite menor preço, atualização mais recente, próxima partida e menor permanência.
 
-A aba ativa verifica atualizações a cada minuto. A área de atividade mostra as atualizações das tarifas; não simula estado, agenda ou cobertura do coletor externo. Radares pessoais destacam dados recebidos que atendem aos critérios e não alteram as pesquisas do Railway.
+A aba ativa verifica atualizações a cada minuto, preservando os filtros e a quantidade de linhas abertas. Uma falha de atualização mantém os últimos dados e mostra aviso. A data nos detalhes indica a atualização recebida do coletor. O portal não simula estado, agenda ou cobertura do motor externo.
+
+Favoritas ficam no armazenamento local do navegador, sem sincronização entre dispositivos. Cada detalhe pode ser compartilhado com `?oferta=ID`. A área `#admin` mantém autenticação e validação de perfil administrativo no servidor; contas antigas foram preservadas. Preferências, radares e planos antigos deixaram a interface pública, sem excluir os registros existentes.
 
 Os detalhes incluem companhia, datas, horários, números dos voos, duração, conexões e aeronave quando informados. Preços e condições devem ser confirmados no Google Flights. A projeção LATAM de 25–30% é uma simulação de planejamento; não consulta resgates, saldo ou disponibilidade no LATAM Pass. Companhias mistas não recebem essa projeção.
 
@@ -38,4 +40,4 @@ Demonstração: `http://127.0.0.1:4173/?demo=1`. Usa dados fictícios e armazena
 
 Os testes de banco usam PGlite e doubles locais de Vault/pg_net/Cron, sem enviar mensagens. As migrações históricas são mantidas para reconstruir o esquema; as migrações finais retiram as tabelas e funções do coletor antigo e migram os alertas para a fonte externa.
 
-Consulte [docs/OPERACAO.md](docs/OPERACAO.md). SMTP próprio, domínio, cobrança e checkout do Pro continuam como etapas futuras.
+Consulte [docs/OPERACAO.md](docs/OPERACAO.md). O catálogo aberto não depende de envio de e-mail. SMTP próprio e domínio continuam como configurações opcionais futuras; não há venda de planos neste portal.
