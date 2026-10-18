@@ -18,7 +18,12 @@ for(const f of files){
    ('GRU','LIS','Lisboa','Portugal','Europa','2027-02-01','2027-02-15',3500.01,array['TP'],array['TAP'],'https://www.google.com/travel/flights','outbound_only');
    insert into public.fare_history(offer_id,price_brl) select id,price_brl from public.offers;`);
  }
- await db.exec(await readFile('supabase/migrations/'+f,'utf8'));
+ let migration=await readFile('supabase/migrations/'+f,'utf8');
+ if(f.endsWith('_telegram_offer_alerts.sql')){
+  await db.exec(await readFile('tests/telegram-transport-fixture.sql','utf8'));
+  migration=migration.replace(/^create extension if not exists (pg_net|pg_cron) with schema \w+;$/gm,'');
+ }
+ await db.exec(migration);
 }
 assert.equal((await db.query('select count(*)::int n from public.offers where expires_at>now()')).rows[0].n,0,'ofertas legadas acima do teto são expiradas');
 assert.equal((await db.query('select count(*)::int n from public.fare_history')).rows[0].n,2,'histórico de preços preservado');
@@ -140,6 +145,68 @@ assert.deepEqual((await db.query('select public.get_session_composition($1) resu
 await db.exec('reset role;set role anon');
 await assert.rejects(db.query('select public.get_session_composition($1)',[compositionRun]),/permission denied/);
 await assert.rejects(db.query('select * from public.scan_session_summaries'),/permission denied/);
+await db.exec('reset role');
+// Telegram: outbox and relay never put the bot token or recipient in pg_net.
+await db.exec('delete from private.telegram_alerts;delete from net.http_request_queue');
+const notificationOffer=(await db.query(`insert into public.offers(origin,destination,city,country,region,departure_date,return_date,price_brl,airlines,airline_names,booking_url,carrier_validation)
+ values('FLN','MIA','Miami','Estados Unidos','EUA',current_date+30,current_date+40,2999,array['LA'],array['LATAM'],'https://www.google.com/travel/flights?test=1','outbound_only') returning id`)).rows[0].id;
+assert.equal((await db.query('select count(*)::int n from private.telegram_alerts where offer_id=$1',[notificationOffer])).rows[0].n,1);
+assert.equal((await db.query('select count(*)::int n from net.http_request_queue')).rows[0].n,0,'sem destinatário ativado não envia');
+await db.exec("insert into vault.test_secrets values('orbita_telegram_bot_token','example-token');update private.telegram_settings set enabled=true,chat_id=77,relay_url='https://example.supabase.co/functions/v1/telegram-alert',next_send_at=now()-interval '1 second'");
+await db.query("update public.offers set expires_at=now()+interval '8 hours' where id=$1",[notificationOffer]);
+assert.equal((await db.query('select count(*)::int n from private.telegram_alerts where offer_id=$1',[notificationOffer])).rows[0].n,1,'mesma tarifa e preço não repetem o alerta');
+await db.exec('select private.process_telegram_alerts()');
+let telegramAlert=(await db.query('select * from private.telegram_alerts where offer_id=$1',[notificationOffer])).rows[0];
+assert.equal(telegramAlert.status,'sending');assert.equal(telegramAlert.attempts,1);
+const telegramRequest=(await db.query('select url,body from net.http_request_queue where id=$1',[telegramAlert.request_id])).rows[0];
+assert.deepEqual(Object.keys(telegramRequest.body).sort(),['alert_id','nonce']);
+assert.equal(telegramRequest.url,'https://example.supabase.co/functions/v1/telegram-alert');
+assert.ok(!JSON.stringify(telegramRequest).includes('example-token'));
+await db.exec('set role service_role');
+assert.equal((await db.query('select public.claim_telegram_alert($1,$2) result',[telegramAlert.id,'00000000-0000-4000-8000-000000000000'])).rows[0].result,null,'nonce incorreto não libera segredo nem envio');
+const claimed=(await db.query('select public.claim_telegram_alert($1,$2) result',[telegramAlert.id,telegramAlert.dispatch_nonce])).rows[0].result;
+assert.equal(claimed.chat_id,77);assert.equal(claimed.bot_token,'example-token');
+for(const expected of ['FLN → MIA','LATAM','R$ 2.999,00','10 dias','Projeção LATAM','1 adulto'])assert.ok(claimed.text.includes(expected),expected);
+assert.equal((await db.query('select public.claim_telegram_alert($1,$2) result',[telegramAlert.id,telegramAlert.dispatch_nonce])).rows[0].result,null,'despacho só pode ser consumido uma vez');
+await db.query('select public.complete_telegram_alert($1,$2,true,42)',[telegramAlert.id,telegramAlert.dispatch_nonce]);
+await db.exec('reset role');
+assert.equal((await db.query('select status from private.telegram_alerts where id=$1',[telegramAlert.id])).rows[0].status,'sent');
+await db.exec("update private.telegram_settings set next_send_at=now()-interval '1 second'");
+await db.query('update public.offers set price_brl=2900 where id=$1',[notificationOffer]);
+telegramAlert=(await db.query('select * from private.telegram_alerts where offer_id=$1 and price_brl=2900',[notificationOffer])).rows[0];
+assert.equal(telegramAlert.status,'sending','preço novo gera outro alerta');
+await db.exec('set role service_role');
+await db.query('select public.claim_telegram_alert($1,$2)',[telegramAlert.id,telegramAlert.dispatch_nonce]);
+await db.query('select public.complete_telegram_alert($1,$2,false,null,429,120)',[telegramAlert.id,telegramAlert.dispatch_nonce]);
+await db.exec('reset role');
+const retryState=(await db.query("select status,attempts,next_attempt_at>now()+interval '119 seconds' respects_backoff from private.telegram_alerts where id=$1",[telegramAlert.id])).rows[0];
+assert.equal(retryState.status,'queued');assert.equal(retryState.attempts,1);assert.equal(retryState.respects_backoff,true);
+for(let attempt=2;attempt<=3;attempt++){
+ await db.query("update private.telegram_alerts set next_attempt_at=now()-interval '1 second' where id=$1",[telegramAlert.id]);
+ await db.exec("update private.telegram_settings set next_send_at=now()-interval '1 second';select private.process_telegram_alerts()");
+ const current=(await db.query('select dispatch_nonce,attempts from private.telegram_alerts where id=$1',[telegramAlert.id])).rows[0];
+ assert.equal(current.attempts,attempt);
+ await db.exec('set role service_role');
+ await db.query('select public.claim_telegram_alert($1,$2)',[telegramAlert.id,current.dispatch_nonce]);
+ await db.query('select public.complete_telegram_alert($1,$2,false,null,503)',[telegramAlert.id,current.dispatch_nonce]);
+ await db.exec('reset role');
+}
+assert.equal((await db.query('select status from private.telegram_alerts where id=$1',[telegramAlert.id])).rows[0].status,'failed','limite de três tentativas');
+const beforeRejected=(await db.query('select count(*)::int n from private.telegram_alerts')).rows[0].n;
+await assert.rejects(db.query('update public.offers set price_brl=3000.01 where id=$1',[notificationOffer]),/Tarifa acima do teto/);
+assert.equal((await db.query('select count(*)::int n from private.telegram_alerts')).rows[0].n,beforeRejected,'tarifas rejeitadas não geram alertas');
+await db.exec("update private.telegram_settings set next_send_at=now()+interval '1 hour'");
+await db.query('update public.offers set price_brl=2800 where id=$1',[notificationOffer]);
+await db.query("update public.offers set expires_at=now()-interval '1 second' where id=$1",[notificationOffer]);
+await db.exec("update private.telegram_settings set next_send_at=now()-interval '1 second';select private.process_telegram_alerts()");
+assert.equal((await db.query('select status from private.telegram_alerts where offer_id=$1 and price_brl=2800',[notificationOffer])).rows[0].status,'skipped','preço expirado não é enviado depois');
+const nonLatam=(await db.query("select private.telegram_offer_text(o) message from public.offers o where o.destination='LIS' limit 1")).rows[0].message;
+assert.ok(!nonLatam.includes('Projeção LATAM'));
+await as(admin);
+for(const query of ['select * from private.telegram_settings','select * from private.telegram_alerts','select * from vault.decrypted_secrets','select * from net.http_request_queue','select private.process_telegram_alerts()'])await assert.rejects(db.query(query),/permission denied/,'mesmo admin no navegador não acessa token ou envio privilegiado');
+await assert.rejects(db.query('select public.claim_telegram_alert($1,$2)',[telegramAlert.id,telegramAlert.dispatch_nonce]),/permission denied/);
+await as(b);
+await assert.rejects(db.query('select private.dispatch_telegram_alert($1)',[telegramAlert.id]),/permission denied/);
 await db.exec('reset role');
 const rls=await db.query("select tablename from pg_tables where schemaname in ('public','private') and rowsecurity=false");
 assert.equal(rls.rows.length,0,'RLS em todas as tabelas do produto');
