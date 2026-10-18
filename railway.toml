@@ -1,0 +1,11 @@
+# Optional private calendar service. Does not change the running GitHub scanner.
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "calendar_service/Dockerfile"
+
+[deploy]
+healthcheckPath = "/health"
+healthcheckTimeout = 60
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
+numReplicas = 1

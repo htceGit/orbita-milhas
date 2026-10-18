@@ -94,7 +94,7 @@ class RecoveryTests(unittest.TestCase):
   store=FakeStore(4);calls=[]
   def calendar(a,b,start,end,low,high,stops,*args):
    q=CalendarQuery(a,b,start,end,low,high,stops)
-   entries=[CalendarPrice(Search(a,b,start+timedelta(days=i),start+timedelta(days=i+low)),3000+i) for i in range(2)]
+   entries=[CalendarPrice(Search(a,b,start+timedelta(days=i),start+timedelta(days=i+low)),2900+i) for i in range(2)]
    return CalendarCapture(q,entries,search_calls=2,calendar_requests=1)
   def search(query,*args):
    calls.append(query)

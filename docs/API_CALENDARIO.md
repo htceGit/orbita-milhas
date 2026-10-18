@@ -1,6 +1,6 @@
 # API própria de calendário do Órbita
 
-O coletor é mantido neste repositório em `calendar_service/`. Usa um navegador isolado e os controles públicos do Google Flights. Captura respostas nativas de calendário, valida datas/permanência/moeda e devolve JSON de preços. Não depende do fork anterior para extrair o calendário. O `fast-flights` continua fornecendo o construtor de URLs e a validação detalhada de companhia.
+O coletor é mantido neste repositório em `calendar_service/`. Usa um navegador isolado e os controles públicos do Google Flights. Captura respostas nativas de calendário, valida datas/permanência/moeda e devolve JSON de preços. Não depende do fork anterior para extrair o calendário. O `fast-flights` fornece o construtor de URLs; o parser de detalhes é mantido em `worker/detail_parser.py`.
 
 ## API autenticada publicada
 
@@ -43,7 +43,9 @@ Cada entrada traz `origin`, `destination`, `departure_date`, `return_date`, `sta
 
 Os metadados incluem `priced_combinations`, `total_combinations`, `search_calls`, `calendar_requests`, `completed_sweeps`, `requested_sweeps`, `collected_at`, `status` e `note`. `completed` significa que a navegação planejada terminou, não que todas as combinações possuem tarifas ou que a companhia foi validada. `partial` preserva os preços anteriores à falha. A mesma combinação é deduplicada dentro da captura.
 
-O gráfico nativo usa duração fixa. A API reúne o intervalo solicitado em janelas de até 60 dias; não transforma uma chamada HTTP à nossa API em uma única chamada ao Google. Para 182 datas e 14 permanências, estima-se inicialmente 60 chamadas de pesquisa por rota, mais tentativas limitadas de recuperação. O worker desconta o custo real do orçamento da rodada, incluindo tentativas que falharam. Arquivos estáticos não são consultas de pesquisa.
+O seletor nativo consulta uma duração fixa por vez. A API reúne as respostas mensais sem recarregar a página por janela; não transforma uma chamada HTTP à nossa API em uma única chamada ao Google. Para o período 18/10/2026–17/04/2027 e 14 permanências, estima-se uma página + 84 respostas de calendário = 85 chamadas por rota. O custo real, incluindo tentativas sem resposta válida, é descontado do orçamento. Arquivos estáticos não são consultas de pesquisa.
+
+`attempted_stays` identifica as permanências efetivamente iniciadas pelo coletor novo; `requested_sweeps` conta essas tentativas. `completed_sweeps` exige cobertura contínua do período por intervalos de respostas válidas. Uma falha mensal preserva os preços anteriores e permite tentar a próxima duração; três durações consecutivas com erro encerram o lote. O cursor automático mantém as durações não tentadas para retomada. Resultados antigos podem não ter `attempted_stays`.
 
 A captura não confirma companhia, bagagem, disponibilidade de resgate ou preço final de emissão. As melhores datas, inclusive dos pedidos administrativos, seguem para `worker/provider.py` com orçamento reservado e o limite de conexões pedido, que identifica a companhia e confirma o preço da consulta detalhada antes de publicar uma oferta no portal. Projeções de milhas ficam restritas à identificação LATAM, como simulação.
 
@@ -64,7 +66,7 @@ Configure `CALENDAR_API_TOKEN` no ambiente, com pelo menos 32 caracteres aleató
 - Autenticação: `Authorization: Bearer <CALENDAR_API_TOKEN>`.
 - `GET /docs`: documentação OpenAPI interativa.
 
-A API síncrona mantém uma captura em andamento por processo, limite de tempo, cache de quatro horas limitado a 32 pedidos e retorna HTTP 429 para concorrência, 422 para parâmetros inválidos e 503 para indisponibilidade do Google. Execute um processo por instância para manter esse limite. Use HTTPS no proxy reverso se hospedar fora do loopback.
+A API síncrona mantém uma captura em andamento por processo, navegador reaproveitado em uma thread exclusiva, limite de tempo e cache de quatro horas limitado a 32 pedidos e retorna HTTP 429 para concorrência, 422 para parâmetros inválidos e 503 para indisponibilidade do Google. O navegador é fechado após cinco minutos sem capturas. Execute um processo por instância para manter esse limite. Use HTTPS no proxy reverso se hospedar fora do loopback.
 
 Docker, a partir da raiz do repositório:
 
@@ -91,3 +93,7 @@ O smoke faz uma captura real pequena via HTTP, verifica recusa sem autenticaçã
 O worker seleciona até **dois pares de datas distintos para cada origem × destino × permanência** depois de reunir todas as janelas da captura. Uma captura de 7–20 dias pode gerar até 28 consultas detalhadas. As duas vagas são para o período inteiro de cada duração, não para cada janela. Uma captura parcial só permite ordenar os preços já obtidos; não confirma que sejam os dois menores de todo o horizonte.
 
 O orçamento da rodada reserva essas consultas antes de iniciar a captura. Pedidos manuais sem saldo suficiente ficam na fila. Nas pesquisas automáticas, o planejador pode agrupar parte das durações e retomar a próxima duração na rodada seguinte. A administração mostra a mesma regra de seleção, mas a presença de um preço no calendário não comprova que a consulta detalhada tenha sido concluída.
+
+## Railway preparado para avaliação
+
+`railway.toml` aponta para o Dockerfile do coletor, usa `/health` e reinício limitado em caso de falha. O servidor aceita `PORT` e exige `CALENDAR_API_TOKEN` de pelo menos 32 caracteres. A configuração não publica um serviço nem transfere automaticamente o scanner; o motor em produção permanece no GitHub Actions. Consulte [MOTOR_E_RAILWAY.md](MOTOR_E_RAILWAY.md) para custos, limites da comparação e a autenticação necessária à migração completa.

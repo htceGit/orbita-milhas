@@ -12,8 +12,12 @@ ORIGINS = ('CWB','JOI','NVT','FLN','VCP','GRU')
 CALENDAR_DETAILS_PER_STAY = 2
 CALENDAR_WINDOW_DAYS = 60
 
-def calendar_calls(days:int,stays:int) -> int:
-    return ceil(days/CALENDAR_WINDOW_DAYS)*(stays+1)
+def calendar_calls(days:int,stays:int,start:date|None=None) -> int:
+    # One page per route; picker initially shows two months, then asks for
+    # each additional month. Every duration starts at the anchor month.
+    end=start+timedelta(days=days-1) if start else None
+    months=(end.year-start.year)*12+end.month-start.month+1 if start else ceil((days-1)/28)+1
+    return 1+max(1,months-1)*stays
 
 @dataclass(frozen=True)
 class Search:
@@ -78,7 +82,7 @@ class Planner:
             task=self.calendar_tasks[index+count-1]
             if task[:2]!=first[:2] or task[2]!=first[2]+count-1:break
             reserve=min(CALENDAR_DETAILS_PER_STAY,self.days)*count
-            if calendar_calls(self.days,count)+reserve>budget:break
+            if calendar_calls(self.days,count,self.today+timedelta(days=1))+reserve>budget:break
             batch=(first[0],first[1],first[2],task[2])
         return batch
 

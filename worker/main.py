@@ -8,6 +8,7 @@ import sys
 from .planner import Planner
 from .storage import Store
 from .provider import FastFlightsProvider
+from .detail_worker import DetailWorker
 from .fare_policy import fare_cap,offer_allowed
 from .calendar import BrowserCalendarEngine,best_candidates_per_stay
 from .diagnostics import SearchFailure,diagnose
@@ -43,7 +44,7 @@ def bounded_search(query,metadata,max_stops,proxy,timeout=40):
         if process.is_alive():process.kill();process.join()
         parent.close()
 
-def run(store,search=bounded_search,clock=monotonic,calendar_search=None):
+def run(store,search=None,clock=monotonic,calendar_search=None):
     settings=store.request('scanner_settings',params={'id':'eq.1'})[0]
     if not settings['enabled']:
         print('Motor pausado pela administração.');return 0
@@ -67,6 +68,8 @@ def run(store,search=bounded_search,clock=monotonic,calendar_search=None):
     override=int(os.environ.get('QUERY_BUDGET_OVERRIDE','0') or 0)
     if override>0:budget=min(budget,override)
     engine=BrowserCalendarEngine() if calendar_search is None else None
+    detail_worker=DetailWorker() if search is None else None
+    if detail_worker:search=detail_worker
     if engine:
         calendar_search=lambda a,b,start,end,low,high,stops,proxy,max_calls:engine.capture(CalendarQuery(a,b,start,end,low,high,stops),max_search_calls=max_calls,proxy=proxy,progress=capture_progress)
     workflow_id=os.environ.get('GITHUB_RUN_ID','')
@@ -124,39 +127,42 @@ def run(store,search=bounded_search,clock=monotonic,calendar_search=None):
             candidates=pending_candidates;pending_candidates=[]
             if not candidates and calendar_active:
                 if calendar_tasks_attempted>=len(planner.calendar_tasks):
-                    if calendar_status=='unavailable':calendar_active=False
-                    else:
-                        reason='Todos os calendários da fila foram percorridos nesta rodada.';planned_stop=True;break
+                    reason='Todos os calendários da fila foram percorridos nesta rodada.';planned_stop=True;break
                 task=planner.calendar_batch(calendar_cursor,budget-attempts,len(planner.calendar_tasks)-calendar_tasks_attempted) if calendar_active else None
                 if calendar_active and task is None:
                     reason='Saldo reservado: a próxima sessão retoma o próximo calendário com até dois detalhes por permanência.';planned_stop=True;break
             if not candidates and calendar_active:
                 calendar_query=CalendarQuery(task[0],task[1],planner.today+timedelta(days=1),planner.today+timedelta(days=planner.days),task[2],task[3],settings['max_stops'])
                 phase='calendar';current={**calendar_query.json()};checkpoint(True);call_started=clock()
+                attempted_count=task[3]-task[2]+1
                 try:
                     capture=calendar_search(*task[:2],calendar_query.departure_start,calendar_query.departure_end,*task[2:],settings['max_stops'],proxy,budget-attempts-calendar_query.detail_reserve)
                 except TelemetryFailure:raise
                 except Exception as exc:
+                    attempted_count=len(getattr(exc,'attempted_stays',[])) or attempted_count
                     used=max(1,getattr(exc,'search_calls',0));attempts+=used;calendar_search_calls+=used
                     calendar_queries+=getattr(exc,'calendar_requests',0)
                     errors+=1;calendar_errors+=1;calendar_status='unavailable';calendar_partial=True
-                    calendar_active=calendar_errors<3 and not isinstance(exc,CalendarBlocked)
                     diagnostic=diagnose(exc);reporter.event('calendar','error',diagnostic=diagnostic,duration_ms=(clock()-call_started)*1000,context=current)
                     print(f'Calendário {task[0]}–{task[1]}: {diagnostic["code"]} / {diagnostic["cause_type"]}: {diagnostic["message"]}',flush=True)
                     if diagnostic['code'] in ('rate_limited','access_denied','challenge'):reason='Sessão interrompida por limitação ou verificação de acesso do Google.'
+                    elif calendar_errors>=3:reason='Calendário indisponível após três rotas consecutivas; a fila continua na próxima sessão.'
                 else:
+                    attempted_count=len(capture.attempted_stays) or attempted_count
+                    current={**current,'max_days':task[2]+attempted_count-1}
                     attempts+=capture.search_calls;calendar_search_calls+=capture.search_calls;calendar_queries+=capture.calendar_requests
                     sweeps_completed+=capture.completed_sweeps
                     calendar_entries+=len(capture.entries);calendar_routes+=1;calendar_status='available';calendar_errors=0
                     if capture.status!='completed':errors+=1;calendar_partial=True
                     priced.update(v.query for v in capture.entries if planner.contains(v.query))
-                    reporter.event('calendar','error' if capture.status!='completed' else 'success',diagnostic=capture.diagnostic if capture.status!='completed' else None,duration_ms=(clock()-call_started)*1000,message=f'{len(capture.entries)} preços capturados para {task[0]}–{task[1]}, {task[2]}–{task[3]} dias.',context=current)
+                    eligible=[v for v in capture.entries if offer_allowed({**planner.destinations.get(v.query.destination,{}),'destination':v.query.destination,'price_brl':v.price})]
+                    reporter.event('calendar','error' if capture.status!='completed' else 'success',diagnostic=capture.diagnostic if capture.status!='completed' else None,duration_ms=(clock()-call_started)*1000,message=f'{len(capture.entries)} preços capturados para {task[0]}–{task[1]}, {task[2]}–{task[3]} dias; {len(eligible)} preços dentro do teto antes dos detalhes.',context=current)
                     if capture.diagnostic and capture.diagnostic['code'] in ('rate_limited','access_denied','challenge'):
                         reason='Sessão interrompida por limitação ou verificação de acesso do Google.'
                     store.request('calendar_jobs','POST',capture_record(capture,run['id']))
-                    candidates=[v.query for v in best_candidates_per_stay(capture.entries)]
+                    candidates=[v.query for v in best_candidates_per_stay(eligible)]
                     print(f'Calendário {task[0]}–{task[1]} ({task[2]}–{task[3]} dias): {len(capture.entries)} preços; {capture.search_calls} chamadas; {len(candidates)} datas selecionadas; {capture.status}.',flush=True)
-                task_count=task[3]-task[2]+1
+                task_count=attempted_count
                 sweeps_requested+=task_count
                 calendar_tasks_attempted+=task_count
                 calendar_cursor=(calendar_cursor+task_count)%len(planner.calendar_tasks)
@@ -217,7 +223,7 @@ def run(store,search=bounded_search,clock=monotonic,calendar_search=None):
         complete=len(checked)==planner.total and errors==0
         status='failed' if detail_queries and not checked else('completed' if (attempts>=budget or planned_stop) and not final_errors and not calendar_partial else 'partial')
         message=reason or ('Rodada encerrada; descoberta de datas e validação detalhada são contadas separadamente.')
-        if calendar_status=='unavailable':message+=' Calendário indisponível: busca detalhada utilizada automaticamente.'
+        if calendar_status=='unavailable':message+=' Calendário indisponível; consultas aleatórias de detalhes foram evitadas.'
         phase='finished';current=None;reporter.event('system','finished',message=message);checkpoint(True)
         store.patch('scan_runs',run['id'],{**metrics(),'status':status,'finished_at':datetime.now(timezone.utc).isoformat(),'coverage_complete':complete,'message':message})
         cutoff=datetime.fromtimestamp(datetime.now(timezone.utc).timestamp()-90*86400,timezone.utc)
@@ -238,6 +244,7 @@ def run(store,search=bounded_search,clock=monotonic,calendar_search=None):
         raise
     finally:
         if engine:engine.close()
+        if detail_worker:detail_worker.close()
 
 if __name__=='__main__':
     sys.exit(run(Store(os.environ.get('SUPABASE_URL',''),os.environ.get('SUPABASE_SERVICE_ROLE_KEY',''))))

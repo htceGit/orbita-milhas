@@ -3,7 +3,7 @@ from datetime import date,timedelta
 from calendar_service.domain import CalendarQuery,CalendarCapture,CalendarPrice,price_currency
 from calendar_service.jobs import capture_record
 from worker.planner import Search
-from calendar_service.browser import rpc_range
+from calendar_service.browser import rpc_range,covers_period
 from calendar_service.domain import CalendarUnavailable
 from types import SimpleNamespace
 from urllib.parse import urlencode
@@ -11,9 +11,14 @@ from urllib.parse import urlencode
 class CalendarServiceTests(unittest.TestCase):
  def test_validates_dates_origins_bounds_and_unknown_fields(self):
   data={'origin':'GRU','destination':'MIA','departure_start':'2026-10-18','departure_end':'2027-04-17','min_days':7,'max_days':20}
-  q=CalendarQuery.from_dict(data,today=date(2026,10,17));self.assertEqual(q.estimated_calls,60)
+  q=CalendarQuery.from_dict(data,today=date(2026,10,17));self.assertEqual(q.estimated_calls,85)
   for patch in [{'origin':'CGH'},{'departure_start':'2026-10-17'},{'departure_end':'2027-04-18'},{'max_days':True},{'url':'https://example.test'}]:
    with self.assertRaises(ValueError):CalendarQuery.from_dict({**data,**patch},today=date(2026,10,17))
+ def test_complete_sweep_requires_contiguous_successful_ranges(self):
+  start=date(2026,11,1);end=date(2026,11,30)
+  self.assertFalse(covers_period([(start,date(2026,11,10)),(date(2026,11,12),end)],start,end))
+  self.assertTrue(covers_period([(date(2026,11,10),end),(start,date(2026,11,15))],start,end))
+  self.assertFalse(covers_period([],start,end))
  def test_currency_token_cannot_turn_dollars_into_reals(self):
   for value in ['BRL','USD','EUR']:
    token=base64.urlsafe_b64encode(b'\x1a\x05\x1a\x03'+value.encode()).decode()
@@ -68,7 +73,7 @@ class QueuedCaptureTests(unittest.TestCase):
    def __init__(self):self.calls=0
    def capture(self,query,**kwargs):
     self.calls+=1;self.budget=kwargs['max_search_calls']
-    entries=[CalendarPrice(Search('FLN','MIA',q.departure_start+timedelta(days=i),q.departure_start+timedelta(days=i+stay)),5000-i*100) for stay in [10,11] for i in range(7)]
+    entries=[CalendarPrice(Search('FLN','MIA',q.departure_start+timedelta(days=i),q.departure_start+timedelta(days=i+stay)),2900-i*100) for stay in [10,11] for i in range(7)]
     return CalendarCapture(query,entries,search_calls=3,calendar_requests=2)
   store=Store();engine=Engine();result=process_queued(store,engine,'run',12)
   self.assertEqual(engine.calls,1,'second capture stays queued instead of spending the reserved detail budget')

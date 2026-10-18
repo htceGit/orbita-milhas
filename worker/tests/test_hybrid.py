@@ -98,15 +98,15 @@ class HybridTests(unittest.TestCase):
   self.assertEqual(store.result['calendar_sweeps_requested'],1)
   self.assertEqual(store.result['calendar_sweeps_completed'],0)
  @patch.dict(os.environ,{'QUERY_DELAY_SECONDS':'0','QUERY_BUDGET_OVERRIDE':'0'})
- def test_rpc_failure_falls_back_and_preserves_budget(self):
-  store=FakeStore(9);calls=[]
+ def test_rpc_failure_skips_details_and_preserves_budget(self):
+  store=FakeStore(9)
   def unavailable(*a):raise CalendarUnavailable('RPC')
-  def details(query,*a):calls.append(query);return {'price_brl':3000,'airlines':['AA']}
+  def details(*a):self.fail('No random details after a failed calendar')
   self.assertEqual(run(store,search=details,calendar_search=unavailable),0)
-  self.assertEqual(store.result['queries_attempted'],9)
+  self.assertEqual(store.result['queries_attempted'],1)
   self.assertEqual(store.result['calendar_search_calls'],1)
-  self.assertEqual(store.result['detail_queries'],8)
-  self.assertEqual(len(store.saved),8)
+  self.assertEqual(store.result['detail_queries'],0)
+  self.assertEqual(store.saved,[])
   self.assertEqual(store.result['calendar_status'],'unavailable')
   self.assertFalse(store.result['coverage_complete'])
   self.assertEqual(store.state['calendar_cursor'],0)
@@ -129,7 +129,7 @@ class HybridTests(unittest.TestCase):
   store=FakeStore(60);store.settings['max_days']=8;calls=[]
   def calendar(a,b,start,end,low,high,stops,*args):
    query=CalendarQuery(a,b,start,end,low,high,stops)
-   entries=[CalendarPrice(Search(a,b,start+timedelta(days=i),start+timedelta(days=i+stay)),4000-i*100+stay) for stay in range(low,high+1) for i in range(7)]
+   entries=[CalendarPrice(Search(a,b,start+timedelta(days=i),start+timedelta(days=i+stay)),2900-i*100+stay) for stay in range(low,high+1) for i in range(7)]
    self.assertEqual(args[-1],56,'reserves all four detailed queries')
    return CalendarCapture(query,entries,search_calls=query.estimated_calls,calendar_requests=2)
   def details(query,*args):calls.append(query);return {'price_brl':3000}
@@ -148,7 +148,7 @@ class HybridTests(unittest.TestCase):
   def calendar(a,b,start,end,low,high,stops,*args):
    q=CalendarQuery(a,b,start,end,low,high,stops);captures.append((low,high))
    self.assertEqual(args[-1],2)
-   entries=[CalendarPrice(Search(a,b,start+timedelta(days=i),start+timedelta(days=i+low)),4000-i*100) for i in range(7)]
+   entries=[CalendarPrice(Search(a,b,start+timedelta(days=i),start+timedelta(days=i+low)),2900-i*100) for i in range(7)]
    return CalendarCapture(q,entries,search_calls=2,calendar_requests=1)
   def details(query,*args):calls.append(query);return None
   for _ in range(2):
@@ -157,6 +157,33 @@ class HybridTests(unittest.TestCase):
    self.assertEqual(store.result['detail_queries'],2)
   self.assertEqual(captures,[(7,7),(8,8)])
   self.assertEqual(len(set(calls)),4)
+  self.assertEqual(store.state['calendar_cursor'],0)
+
+
+ @patch.dict(os.environ,{'QUERY_DELAY_SECONDS':'0','QUERY_BUDGET_OVERRIDE':'0'})
+ def test_no_eligible_calendar_price_never_falls_back_to_random_dates(self):
+  store=FakeStore(50)
+  def calendar(a,b,start,end,low,high,stops,*args):
+   q=CalendarQuery(a,b,start,end,low,high,stops)
+   entries=[CalendarPrice(Search(a,b,start,start+timedelta(days=low)),3000.01)]
+   return CalendarCapture(q,entries,search_calls=2,calendar_requests=1)
+  def details(*args):self.fail('Above-cap calendar candidates should be skipped')
+  run(store,search=details,calendar_search=calendar)
+  self.assertEqual(store.result['detail_queries'],0)
+  self.assertEqual(store.result['calendar_entries'],1)
+  self.assertEqual(store.result['errors_count'],0)
+
+class PartialCursorTests(unittest.TestCase):
+ @patch.dict(os.environ,{'QUERY_DELAY_SECONDS':'0','QUERY_BUDGET_OVERRIDE':'0'})
+ def test_unattempted_duration_is_resumed_instead_of_skipped(self):
+  store=FakeStore(7);store.settings['max_days']=8;requests=[]
+  def calendar(a,b,start,end,low,high,stops,*args):
+   requests.append((low,high));q=CalendarQuery(a,b,start,end,low,high,stops)
+   return CalendarCapture(q,[],search_calls=3 if low==7 else 2,calendar_requests=1,
+     status='partial' if low==7 else 'completed',attempted_stays=[low])
+  run(store,search=lambda *args:None,calendar_search=calendar)
+  self.assertEqual(requests,[(7,8),(8,8)])
+  self.assertEqual(store.result['calendar_sweeps_requested'],2)
   self.assertEqual(store.state['calendar_cursor'],0)
 
 if __name__=='__main__':unittest.main()

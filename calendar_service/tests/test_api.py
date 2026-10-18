@@ -10,6 +10,7 @@ class FakeEngine:
  calls=0
  def __enter__(self):return self
  def __exit__(self,*args):pass
+ def close(self):pass
  def capture(self,q):
   FakeEngine.calls+=1
   return CalendarCapture(q,[CalendarPrice(Search(q.origin,q.destination,q.departure_start,q.departure_start+timedelta(days=q.min_days)),3000)],search_calls=2,calendar_requests=1)
@@ -17,7 +18,7 @@ class FakeEngine:
 class ApiTests(unittest.TestCase):
  @patch.dict('os.environ',{'CALENDAR_API_TOKEN':'test-token-'*4})
  def test_auth_validation_cache_and_response(self):
-  FakeEngine.calls=0;client=TestClient(create_app(FakeEngine));headers={'Authorization':'Bearer '+'test-token-'*4}
+  FakeEngine.calls=0;client=self.enterContext(TestClient(create_app(FakeEngine)));headers={'Authorization':'Bearer '+'test-token-'*4}
   body={'origin':'GRU','destination':'MIA','departure_start':str(date.today()+timedelta(days=1)),'departure_end':str(date.today()+timedelta(days=10)),'min_days':7,'max_days':8}
   self.assertEqual(client.post('/v1/calendar',json=body).status_code,401)
   self.assertEqual(client.post('/v1/calendar',headers=headers,json={**body,'origin':'CGH'}).status_code,422)
@@ -31,7 +32,25 @@ class ApiTests(unittest.TestCase):
  def test_provider_failure_is_503_not_empty_success(self):
   class Broken(FakeEngine):
    def capture(self,q):raise CalendarUnavailable('Google indisponível')
-  client=TestClient(create_app(Broken));body={'origin':'GRU','destination':'MIA','departure_start':str(date.today()+timedelta(days=1)),'departure_end':str(date.today()+timedelta(days=2))}
+  client=self.enterContext(TestClient(create_app(Broken)));body={'origin':'GRU','destination':'MIA','departure_start':str(date.today()+timedelta(days=1)),'departure_end':str(date.today()+timedelta(days=2))}
   self.assertEqual(client.post('/v1/calendar',headers={'Authorization':'Bearer '+'test-token-'*4},json=body).status_code,503)
+
+class ThreadOwnershipTests(unittest.TestCase):
+ @patch.dict('os.environ',{'CALENDAR_API_TOKEN':'test-token-'*4})
+ def test_browser_is_reused_and_closed_on_its_own_thread(self):
+  from threading import get_ident
+  threads=[]
+  class OwnedEngine(FakeEngine):
+   def __init__(self):threads.append(('create',get_ident()))
+   def capture(self,q):threads.append(('capture',get_ident()));return super().capture(q)
+   def close(self):threads.append(('close',get_ident()))
+  with TestClient(create_app(OwnedEngine)) as client:
+   headers={'Authorization':'Bearer '+'test-token-'*4}
+   body={'origin':'GRU','destination':'MIA','departure_start':str(date.today()+timedelta(days=1)),'departure_end':str(date.today()+timedelta(days=10))}
+   self.assertEqual(client.post('/v1/calendar',headers=headers,json=body).status_code,200)
+   self.assertEqual(client.post('/v1/calendar',headers=headers,json={**body,'destination':'JFK'}).status_code,200)
+  self.assertEqual([kind for kind,thread in threads],['create','capture','capture','close'])
+  self.assertEqual(len({thread for kind,thread in threads}),1)
+  self.assertNotEqual(threads[0][1],get_ident())
 
 if __name__=='__main__':unittest.main()

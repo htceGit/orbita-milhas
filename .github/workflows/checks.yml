@@ -30,8 +30,39 @@ jobs:
         with:
           python-version: '3.12'
       - run: npm ci --no-audit --no-fund
-      - run: npm test
       - run: pip install -r calendar_service/requirements.txt
+      - run: npm test
       - run: python -m unittest discover -s calendar_service/tests -v
       - run: npm run test:db
       - run: npm run build
+  container:
+    name: Verificar imagem opcional do coletor
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f calendar_service/Dockerfile -t orbita-calendar:check .
+      - run: docker run --detach --name orbita-calendar-check orbita-calendar:check
+      - name: Verificar inicialização sem credenciais de produção
+        run: |
+          docker exec -i orbita-calendar-check python - <<'PY'
+          import json,time
+          from urllib.request import urlopen,Request
+          from urllib.error import HTTPError,URLError
+          for attempt in range(20):
+              try:
+                  with urlopen('http://127.0.0.1:8080/health',timeout=2) as response:
+                      assert json.load(response)['version']=='2.0.0'
+                  break
+              except URLError:
+                  if attempt==19:raise
+                  time.sleep(.5)
+          try:
+              urlopen(Request('http://127.0.0.1:8080/v1/calendar',data=b'{}',headers={'Content-Type':'application/json'}),timeout=2)
+          except HTTPError as exc:
+              assert exc.code==503,exc.code
+          else:raise AssertionError('Captura liberada sem token configurado')
+          print('Container iniciou e recusou captura sem token.')
+          PY
+      - if: always()
+        run: docker rm --force orbita-calendar-check || true

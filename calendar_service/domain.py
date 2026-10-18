@@ -44,7 +44,7 @@ class CalendarQuery:
     @property
     def days(self):return (self.departure_end-self.departure_start).days+1
     @property
-    def estimated_calls(self):return calendar_calls(self.days,self.max_days-self.min_days+1)
+    def estimated_calls(self):return calendar_calls(self.days,self.max_days-self.min_days+1,self.departure_start)
 
     @property
     def detail_reserve(self):return min(CALENDAR_DETAILS_PER_STAY,self.days)*(self.max_days-self.min_days+1)
@@ -68,11 +68,15 @@ class CalendarCapture:
     note:str=''
     collected_at:str=field(default_factory=lambda:datetime.now(timezone.utc).isoformat())
     diagnostic:dict|None=None
+    attempted_stays:list[int]=field(default_factory=list)
+
+    @property
+    def requested_sweeps(self):return len(self.attempted_stays) if self.attempted_stays else self.request.max_days-self.request.min_days+1
 
     def json(self):
         return {'request':self.request.json(),'status':self.status,'source':'google_flights_calendar','transport':'browser_ui',
             'currency':'BRL','collected_at':self.collected_at,'search_calls':self.search_calls,'calendar_requests':self.calendar_requests,
-            'completed_sweeps':self.completed_sweeps,'requested_sweeps':self.request.max_days-self.request.min_days+1,
+            'completed_sweeps':self.completed_sweeps,'requested_sweeps':self.requested_sweeps,'attempted_stays':self.attempted_stays,
             'priced_combinations':len(self.entries),'total_combinations':self.request.days*(self.request.max_days-self.request.min_days+1),
             'note':self.note,'diagnostic':self.diagnostic,'entries':[e.json() for e in sorted(self.entries,key=lambda e:e.price)]}
 
@@ -104,13 +108,16 @@ def price_currency(token):
     except (ValueError,TypeError,AttributeError,UnicodeError):return None
 
 def parse_calendar(text,origin,destination,start,end,stay):
-    valid=False;entries={}
+    valid=False;entries={};upstream_error=False
     for line in text.removeprefix(")]}'").splitlines():
         try:frames=json.loads(line)
         except (ValueError,TypeError):continue
         if not isinstance(frames,list):continue
         for frame in frames:
-            if not isinstance(frame,list) or len(frame)<3 or frame[0]!='wrb.fr' or not isinstance(frame[2],str):continue
+            if not isinstance(frame,list) or len(frame)<3 or frame[0]!='wrb.fr':continue
+            if frame[2] is None:
+                upstream_error=True;continue
+            if not isinstance(frame[2],str):continue
             try:payload=json.loads(frame[2])
             except ValueError:continue
             if not isinstance(payload,list) or len(payload)<2 or not isinstance(payload[1],list):continue
@@ -125,7 +132,11 @@ def parse_calendar(text,origin,destination,start,end,stay):
                     query=Search(origin,destination,departure,returning)
                     entries[query]=min(float(price),entries.get(query,float('inf')))
                 except (ValueError,TypeError,IndexError,KeyError):continue
-    if not valid:raise CalendarUnavailable('O Google não devolveu um calendário válido.')
+    if not valid:
+        error=CalendarUnavailable('O Google devolveu um erro na pesquisa de calendário.' if upstream_error else 'O Google não devolveu um calendário válido.')
+        error.diagnostic={'code':'upstream_error' if upstream_error else 'parse_error','cause_type':'CalendarRpcError' if upstream_error else 'ChangedCalendarData',
+            'message':str(error),'http_status':None,'retryable':upstream_error}
+        raise error
     return [CalendarPrice(q,p) for q,p in entries.items()]
 
 def best_candidates(entries,limit=3):return sorted(entries,key=lambda x:(x.price,x.query.departure))[:limit]

@@ -3,6 +3,9 @@ from datetime import date
 from threading import Lock
 from time import monotonic
 from secrets import compare_digest
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
+import asyncio
 import os
 from fastapi import FastAPI,Depends,HTTPException
 from fastapi.security import HTTPBearer,HTTPAuthorizationCredentials
@@ -28,10 +31,36 @@ def authorize(credentials:HTTPAuthorizationCredentials=Depends(bearer)):
 
 
 def create_app(engine_factory=BrowserCalendarEngine):
-    app=FastAPI(title='Órbita Calendar API',version='1.0.0',description='Captura própria do calendário público do Google Flights. Os preços não confirmam companhia ou resgate com milhas.')
+    # Playwright objects must be created, used and closed on the same thread.
+    # HTTP request threads only submit work; one dedicated thread owns Chromium.
+    executor=ThreadPoolExecutor(max_workers=1,thread_name_prefix='orbita-browser');holder=[];last_used=[monotonic()]
     busy=Lock();cache={}
+    def close_engine():
+        if holder:holder.pop().close()
+    def capture(q):
+        if not holder:holder.append(engine_factory())
+        try:return holder[0].capture(q)
+        except Exception:
+            close_engine();raise
+        finally:last_used[0]=monotonic()
+    async def release_idle_browser():
+        while True:
+            await asyncio.sleep(30)
+            if monotonic()-last_used[0]<300 or not busy.acquire(blocking=False):continue
+            try:await asyncio.wrap_future(executor.submit(close_engine))
+            finally:busy.release()
+    @asynccontextmanager
+    async def lifespan(app):
+        cleanup=asyncio.create_task(release_idle_browser())
+        try:yield
+        finally:
+            cleanup.cancel()
+            try:await cleanup
+            except asyncio.CancelledError:pass
+            executor.submit(close_engine).result();executor.shutdown(wait=True)
+    app=FastAPI(title='Órbita Calendar API',version='2.0.0',lifespan=lifespan,description='Captura própria do calendário público do Google Flights. Os preços não confirmam companhia ou resgate com milhas.')
     @app.get('/health')
-    def health():return {'status':'ok','service':'orbita-calendar','version':'1.0.0'}
+    def health():return {'status':'ok','service':'orbita-calendar','version':'2.0.0'}
     @app.post('/v1/calendar',dependencies=[Depends(authorize)])
     def calendar(payload:CalendarRequest):
         try:q=CalendarQuery.from_dict(payload.model_dump(mode='json'))
@@ -41,7 +70,7 @@ def create_app(engine_factory=BrowserCalendarEngine):
         try:
             cached=cache.get(key)
             if cached and monotonic()-cached[0]<14400:return {**cached[1],'cached':True}
-            with engine_factory() as engine:result=engine.capture(q)
+            result=executor.submit(capture,q).result()
             body=result.json()
             if result.status=='completed':
                 cache[key]=(monotonic(),body)

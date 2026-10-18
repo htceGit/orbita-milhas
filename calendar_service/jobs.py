@@ -7,6 +7,7 @@ from datetime import datetime,timedelta,timezone
 from .domain import CalendarQuery,best_candidates_per_stay
 from worker.diagnostics import diagnose
 from worker.telemetry import TelemetryFailure
+from worker.fare_policy import offer_allowed
 
 def cache_key(query):return hashlib.sha256(json.dumps(query.json(),sort_keys=True,separators=(',',':')).encode()).hexdigest()
 
@@ -48,10 +49,11 @@ def process_queued(store,engine,run_id,budget,proxy=None,progress=None):
             errors+=1
             if capture.diagnostic:diagnostics.append(capture.diagnostic)
         used+=capture.search_calls;prices+=len(capture.entries);calendars+=capture.calendar_requests;routes+=1
-        sweeps_requested+=q.max_days-q.min_days+1;sweeps_completed+=capture.completed_sweeps
+        sweeps_requested+=capture.requested_sweeps;sweeps_completed+=capture.completed_sweeps
         captures.append(capture);all_prices.extend(capture.entries)
         store.patch('calendar_jobs',job['id'],capture_record(capture,run_id,job['user_id']))
         if capture.diagnostic and capture.diagnostic['code'] in ('rate_limited','access_denied','challenge'):break
-        for value in best_candidates_per_stay(capture.entries):
+        eligible=[v for v in capture.entries if offer_allowed({'destination':v.query.destination,'price_brl':v.price})]
+        for value in best_candidates_per_stay(eligible):
             candidates.append(value.query);candidate_stops[value.query]=q.max_stops
     return {'search_calls':used,'entries':prices,'calendars':calendars,'routes':routes,'errors':errors,'candidates':candidates,'candidate_stops':candidate_stops,'captures':captures,'diagnostics':diagnostics,'sweeps_requested':sweeps_requested,'sweeps_completed':sweeps_completed}

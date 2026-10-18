@@ -1,4 +1,4 @@
-"""Detailed Google Flights adapter pinned to fast-flights 3.1.0 (MIT)."""
+"""Own fare parser and reusable HTTP transport; URLs use fast-flights 3.1.0."""
 from datetime import datetime, timedelta, timezone
 import math
 import re
@@ -13,7 +13,7 @@ AIRLINES = {'LA':'LATAM','AA':'American Airlines','UA':'United Airlines','DL':'D
             'LH':'Lufthansa','LX':'SWISS','CM':'Copa Airlines','AV':'Avianca','AD':'Azul',
             'G3':'GOL','TK':'Turkish Airlines','QR':'Qatar Airways','EK':'Emirates','ET':'Ethiopian Airlines'}
 
-def normalize_cheapest(results, query: Search, metadata:dict, url:str, now=None, airline_metadata=()):
+def normalize_cheapest(results, query: Search, metadata:dict, url:str, now=None, airline_metadata=(),max_stops=None):
     names = dict(AIRLINES)
     names.update({a.code:a.name for a in airline_metadata if a.code and a.name})
     codes = {name.casefold():code for code,name in names.items()}
@@ -23,6 +23,7 @@ def normalize_cheapest(results, query: Search, metadata:dict, url:str, now=None,
         if not item.airlines or any(not isinstance(a,str) or not a.strip() for a in item.airlines):continue
         if not isinstance(item.price,(int,float)) or isinstance(item.price,bool) or not math.isfinite(item.price) or item.price<=0:continue
         if not item.flights:continue
+        if max_stops is not None and len(item.flights)-1>max_stops:continue
         if item.flights[0].from_airport.code!=query.origin or item.flights[-1].to_airport.code!=query.destination:continue
         if tuple(item.flights[0].departure.date)!=(query.departure.year,query.departure.month,query.departure.day):continue
         candidates.append(item)
@@ -37,7 +38,7 @@ def normalize_cheapest(results, query: Search, metadata:dict, url:str, now=None,
         'region':metadata.get('region','Outros'),'departure_date':query.departure.isoformat(),
         'return_date':query.returning.isoformat(),'price_brl':round(float(best.price),2),
         'airlines':carriers,'airline_names':labels,'stops':len(best.flights)-1,'booking_url':url,
-        'provider':'fast_flights','source':'google_flights','fare_scope':'round_trip_search',
+        'provider':'orbita_http_details','source':'google_flights','fare_scope':'round_trip_search',
         # Outbound carriers only; return segments and awards need confirmation.
         'carrier_validation':'outbound_only',
         'collected_at':now.isoformat(),'expires_at':(now+timedelta(hours=8)).isoformat(),
@@ -45,11 +46,15 @@ def normalize_cheapest(results, query: Search, metadata:dict, url:str, now=None,
 
 class FastFlightsProvider:
     def __init__(self,max_stops=2,proxy=None):
-        self.max_stops=max_stops;self.proxy=proxy
+        self.max_stops=max_stops;self.proxy=proxy;self.client=None
+
+    def close(self):
+        if self.client and hasattr(self.client,'close'):self.client.close()
+        self.client=None
 
     def search(self,query:Search,metadata:dict):
         from fast_flights import FlightQuery,Passengers,create_query,FlightsNotFound
-        from fast_flights.parser import parse
+        from .detail_parser import parse_detail_html
         from primp import Client
         q=create_query(flights=[
             FlightQuery(date=query.departure.isoformat(),from_airport=query.origin,to_airport=query.destination),
@@ -58,11 +63,11 @@ class FastFlightsProvider:
         # Same transport as the pinned library, with explicit deadlines and
         # response classification before its parser sees the page.
         try:
-            client=Client(impersonate='chrome_145',impersonate_os='macos',referer=True,
-                proxy=self.proxy,cookie_store=True,timeout=25,connect_timeout=10)
-            response=client.get('https://www.google.com/travel/flights',params=q.params())
-            results=parse_response(response.status_code,response.text,str(response.url),parse,FlightsNotFound)
-            return normalize_cheapest(results,query,metadata,q.url(),airline_metadata=getattr(getattr(results,'metadata',None),'airlines',[]))
+            if self.client is None:self.client=Client(impersonate='chrome_145',impersonate_os='macos',referer=True,
+                proxy=self.proxy,cookie_store=True,timeout=20,connect_timeout=8)
+            response=self.client.get('https://www.google.com/travel/flights',params=q.params())
+            results=parse_response(response.status_code,response.text,str(response.url),parse_detail_html,FlightsNotFound)
+            return normalize_cheapest(results,query,metadata,q.url(),airline_metadata=getattr(getattr(results,'metadata',None),'airlines',[]),max_stops=self.max_stops)
         except SearchFailure:raise
         except Exception as exc:raise SearchFailure.from_diagnostic(diagnose(exc)) from exc
 
@@ -77,6 +82,7 @@ def parse_response(status,html,url,parser,not_found):
     if 'consent.google.com' in url:
         raise SearchFailure('consent_required','ConsentRequired','A resposta direcionou para a página de consentimento.')
     try:return parser(html)
+    except SearchFailure:raise
     except not_found as exc:
         raise SearchFailure('upstream_error',type(exc).__name__,'A biblioteca recebeu um erro de pesquisa, sem confirmação de inventário.',retryable=True) from exc
     except Exception as exc:
