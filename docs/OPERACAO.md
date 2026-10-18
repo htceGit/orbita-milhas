@@ -1,109 +1,43 @@
-# Operação do Órbita
+# Operação do portal
 
-## Primeiro acesso
+## Separação de responsabilidades
 
-1. Abra o portal, escolha **Criar conta** e use o e-mail reservado para a administração.
-2. Confirme o cadastro pelo e-mail, no mesmo navegador em que iniciou o cadastro (fluxo PKCE).
-3. Entre novamente. A conta confirmada recebe Administração e Pro. Outros usuários recebem Free.
-4. Em Administração, ajuste aeroportos, destinos, permanência, conexões e orçamento de consultas. As alterações entram na próxima rodada.
+- GitHub Pages: frontend do Órbita.
+- Supabase: Auth, contas, preferências, favoritos, radares pessoais, dados recebidos e alertas Telegram.
+- Motor externo: escreve em `public.tarifaspromo` com chave de servidor. Seu código, agenda e implantação pertencem a outro projeto.
 
-Uma reserva administrativa só pode ser consumida uma vez. Novos administradores devem ser promovidos pelo operador do banco; o formulário de usuários altera apenas Free/Pro, validade do Pro e suspensão.
+O workflow do coletor antigo foi desativado; as sessões restantes foram canceladas, seus históricos removidos e seu ambiente de espera excluído. As APIs antigas scan-api e calendar-api retornam HTTP 410 e não executam operações de coleta. Este repositório só publica e verifica o frontend. Alterações no site não alteram o motor externo.
 
-## URLs de autenticação
+## Contas e acesso
 
-Em **Authentication → URL Configuration** no Supabase:
+Login, cadastro, confirmação de e-mail e recuperação de senha usam Supabase Auth. A Administração gerencia planos Free/Pro, validade do Pro e suspensão. Usuários não podem promover a própria conta. A reserva administrativa é privada e o administrador é promovido após confirmar o e-mail reservado.
 
-- Site URL: `https://htcegit.github.io/orbita-milhas/`
-- Redirect URLs: `https://htcegit.github.io/orbita-milhas/`
+A tabela de tarifas permite somente leitura por usuários com perfil ativo. A gravação é exclusiva do servidor. A view existente `vw_melhores_ofertas` usa `security_invoker`, respeitando as mesmas permissões. Não use essa view ou uma chave de servidor para contornar o login.
 
-Use a URL exata, incluindo o caminho do repositório. Para testar login local, adicione o endereço local explicitamente; não adicione curingas amplos ao ambiente comercial.
+Favoritos novos ficam em `tarifaspromo_favorites`, vinculados ao usuário e ao ID bigint da tarifa. Favoritos antigos são reaproveitados quando existe correspondência de rota e datas no feed novo. Cada usuário só lê e altera seus próprios dados. Os radares têm limite de 3 no Free e 30 no Pro/admin; servem para destacar tarifas do catálogo, sem controlar o coletor externo.
 
-## E-mails transacionais
+## Exibição e atualização
 
-Configure um provedor SMTP em **Authentication → Emails → SMTP Settings**. O serviço padrão Supabase não substitui um provedor comercial e pode restringir envios a endereços da equipe. Defina domínio/remetente, autentique o domínio e valide confirmação de conta e recuperação de senha com um destinatário externo.
+Todas as tarifas válidas recebidas para datas atuais/futuras são elegíveis ao catálogo. O preço máximo é escolhido nos filtros. Não há expiração fictícia de oito horas. O site informa a data de atualização recebida e oferece conferência no Google Flights.
 
-Não desative a confirmação para contornar limites de e-mail: ela protege a reserva do administrador e a posse dos endereços cadastrados. Nenhuma integração SMTP paga foi contratada por este projeto.
+O navegador atualiza o feed a cada 60 segundos enquanto a aba está visível, sem formulário/modal em edição. Há atualização manual na área de atualizações e na Administração. A leitura é paginada; a renderização começa com 24 cartões. A presença de tarifas recentes não é uma confirmação de saúde do worker externo.
 
-## Execuções
+## Telegram
 
-Em **GitHub → Actions → Radar Órbita · sessões com pausa de 15 minutos → Run workflow**, faça uma execução manual quando precisar. Não há chave Supabase para copiar: a função já aceita apenas a identidade OIDC desse workflow na branch principal.
+As tabelas `private.telegram_settings` e `private.telegram_alerts`, o token no Vault e a Edge Function `telegram-alert` continuam em uso. Destinatário fixo: a conversa já vinculada ao bot do proprietário. Nenhuma credencial deve ir para HTML/JS, repositório ou logs.
 
-A continuidade usa uma espera nativa de 15 minutos no ambiente `scanner-pause-15m`; ao liberar o job, ele solicita outra execução pelo próprio GitHub. O cron é uma reserva e pode atrasar. Falhas de parsing/bloqueios do Google aparecem como falhas de consulta. O coletor próprio abre um navegador isolado para descobrir datas no calendário. Em erros, preserva os preços obtidos e registra captura parcial. Três falhas consecutivas de calendário acionam a fila detalhada pelo restante da rodada. Bloqueios explícitos (403, 429 ou verificação humana) encerram a sessão, inclusive em capturas solicitadas pela administração. Oito falhas consecutivas da busca detalhada interrompem a rodada. O campo opcional `query_limit` na execução manual limita as chamadas para testes; zero utiliza o orçamento do portal. Um timeout do job ou cancelamento forçado pode deixar uma execução como `running`; o cursor continua salvo. A próxima verificação reconcilia o registro quando o GitHub confirma o término da execução correspondente; os contadores ficam limitados ao último progresso salvo. Sem essa confirmação, o gate mantém o bloqueio conservador.
+O trigger `tarifaspromo_telegram_alert` avalia inserções e mudanças de preço/companhia/voos/datas. Somente preços estritamente abaixo de R$ 3.000 para LATAM exclusivamente ou abaixo de R$ 2.500 para demais companhias entram na fila. LATAM com trechos de outra empresa segue o limite de R$ 2.500. O catálogo não herda esses limites.
 
-Contas suspensas não contribuem com radares para o motor. Ao expirar Pro, somente os três radares mais antigos são pesquisados até que o usuário reorganize as rotas. Pausar o motor não interrompe imediatamente uma rodada que já começou; a opção é lida no início de cada execução.
+A deduplicação ignora atualizações do mesmo preço e itinerário. O despacho e o claim conferem novamente os dados atuais; tarifas que subiram de preço ou perderam a elegibilidade não são enviadas. O cron privado processa a fila e recupera falhas do relay. Até três tentativas de transporte; intervalo mínimo progressivo. O token só é lido pelo caminho de servidor, com nonce de uso único.
 
-## Evolução para assinatura
+A migração não dispara mensagens retroativas para todo o catálogo existente. Novas tarifas e mudanças elegíveis passam pelo trigger.
 
-1. Escolher um provedor de pagamentos, preços e regras de cancelamento.
-2. Implementar checkout no servidor e webhook com assinatura validada.
-3. Deduplicar pelo ID do evento em `private.billing_events`.
-4. Alterar `profiles.plan` e `pro_until` somente no backend.
-5. Testar atraso de pagamento, reembolso, expiração, renovação e tentativa de promoção pelo navegador.
+## Limpeza do legado
 
-O botão de interesse em Pro registra apenas o interesse no banco. Ele não envia mensagens nem contrata serviço.
+Foram retiradas as tabelas do coletor antigo: `offers`, `fare_history`, `favorites`, `scanner_settings`, `scanner_state`, `scan_runs`, `scan_events`, `scan_session_summaries` e `calendar_jobs`. A tabela privada vazia `billing_events`, que era apenas uma reserva futura sem integração ativa, também foi retirada. Migrações históricas permanecem versionadas.
 
-## Proteção e dados
+Permanecem as tabelas usadas pelo portal: `profiles`, `preferences`, `monitors`, `pro_interest`, `tarifaspromo` e `tarifaspromo_favorites`; no schema privado, a reserva administrativa e as duas tabelas do Telegram. Schemas e tabelas gerenciados pelo Supabase não são removidos.
 
-Migrations estão em `supabase/migrations/`. Os testes em `tests/database.mjs` executam Postgres em memória e verificam isolamento entre usuários, limites, privilégios e suspensão. Para novas mudanças, aplique migrations por CLI/MCP, rode os testes e revise os advisors do Supabase.
+## Preparação comercial
 
-O histórico de preços tem retenção de 90 dias. Para exclusão de dados pessoais, o operador deve excluir a conta pelo Supabase Auth; chaves estrangeiras removem perfil, favoritos, preferências e radares. Faça revogação de sessões antes da exclusão quando houver exigência de bloqueio imediato.
-
-O GitHub Pages publica o código estático. O repositório é público; dados dos usuários e eventos privados ficam no Supabase. O catálogo e as ofertas não têm acesso anônimo pelo banco.
-
-## API de calendário
-
-A Administração inclui **Calendário próprio**: solicite uma rota, datas de saída e permanência; acompanhe a fila e veja os menores preços capturados. Pedidos novos aguardam a próxima rodada do motor. O painel se atualiza automaticamente a cada minuto sem substituir o formulário de configurações. A prévia de calendário ainda não confirma companhia nem disponibilidade de milhas.
-
-O worker processa pedidos administrativos antes da descoberta automática, respeitando o mesmo orçamento global. Uma única captura por usuário pode permanecer na fila ou em processamento. Execuções interrompidas são detectadas na próxima rodada e marcadas como falhas. Os dados brutos de sessão, cookies e headers do Google não são armazenados. Preços completos são comprimidos; o navegador recebe apenas os resumos necessários ou os dados pedidos à API autenticada.
-
-Leia [API_CALENDARIO.md](API_CALENDARIO.md) para contratos, autenticação, execução local, Docker e testes.
-
-## Ritmo das sessões
-
-O motor seleciona até dois detalhes por origem/destino/permanência e tem teto padrão de 1.000 chamadas por sessão. O workflow verifica a pausa antes de instalar dependências: sessões não se sobrepõem, e outra só é liberada após pelo menos 15 minutos do término da última. Após a espera programada, a próxima execução depende também da fila de runners do GitHub. Falhas repetidas continuam interrompendo a captura.
-
-Aumentar a frequência exige acompanhar uso real de Edge Functions, tamanho do banco e tráfego no painel Supabase. O Free inclui 500 mil invocações de Edge Functions/mês, 500 MB de banco e 5 GB de egress; isso não garante que qualquer frequência de busca caiba gratuitamente. Não foi contratado plano pago nem serviço adicional. Ver https://supabase.com/pricing.
-
-## Monitor de sessões
-
-Abra **Administração → Monitor de sessões**. O painel consulta o progresso a cada 15 segundos enquanto estiver visível. Permite escolher entre as 12 sessões recentes, acompanhar a mais nova, filtrar falhas e abrir a execução correspondente no Actions. Atualizações não substituem os formulários da administração.
-
-O consumo compara chamadas efetivamente tentadas com o teto daquela sessão, inclusive o limite manual de teste. A cobertura representa pares únicos origem/destino/ida/volta com preço de calendário capturado dentro da matriz configurada. Preços brutos, datas detalhadas concluídas, tentativas, tarifas salvas, descartes por teto de preço, consultas vazias e recuperações aparecem separadamente. Sessões anteriores à implantação não possuem a causa original nem cobertura única retroativa.
-
-O worker publica sinais e salva o cursor em intervalos de aproximadamente 15 segundos, além das mudanças de etapa. Durante uma resposta demorada, o sinal pode ficar temporariamente antigo; após dois minutos o painel avisa e o link do Actions permite conferir a execução. A próxima verificação tenta reconciliar registros sem encerramento com a execução correspondente no GitHub. Sem confirmação, o bloqueio é preservado.
-
-A consulta detalhada tem timeout de transporte de 25 segundos e limite externo de 40 segundos. Falhas transitórias podem receber uma única nova tentativa após três segundos, se houver orçamento além da reserva para as demais datas selecionadas. Cada tentativa consome uma chamada. Erros de interpretação não são repetidos automaticamente; bloqueios encerram a sessão. Uma falha recuperada permanece no contador de falhas registradas, sem tornar por si só a sessão parcial. Esse contador inclui falhas finais de captura de calendário, tentativas detalhadas com erro e falhas de infraestrutura. Repetições e recuperações se referem às consultas detalhadas.
-
-Eventos detalhados têm leitura exclusiva de administradores ativos e retenção de sete dias, removidos ao final das rodadas. Mensagens são limitadas e sanitizadas: não se guardam HTML, cookies, cabeçalhos ou credenciais. Resumos permanecem no histórico de sessões. Confira [DIAGNOSTICO_DO_MOTOR.md](DIAGNOSTICO_DO_MOTOR.md) para evidências e próximos aprimoramentos.
-
-## Continuidade automática
-
-O workflow inclui o job **Próxima sessão após pausa de 15 minutos**. O ambiente `scanner-pause-15m` tem `wait_timer=15`, sem revisores, restrito à branch `main`. Durante a espera, nenhum runner fica ativo. O job verifica a existência dessa regra antes de usar a identidade temporária do GitHub para solicitar a próxima execução com `query_limit=0`, `mode=scan` e `trigger_source=continuation`. Uma configuração sem a espera correta bloqueia o disparo. A concorrência mantém no máximo um workflow ativo e um pendente.
-
-Em **Run workflow**, `mode=scan` executa e mantém a continuidade; `mode=once` executa uma única rodada; `mode=arm` apenas reativa a espera, sem pesquisar imediatamente. Limites de teste maiores que zero não iniciam uma sequência contínua. Falhas do motor ainda permitem a próxima tentativa após a pausa; cancelar o workflow interrompe sua continuidade. O cron de reserva permanece habilitado. Para parar apenas as consultas, pause o motor no portal; para desativar toda a rotina, desabilite o workflow e cancele a execução pendente no Actions.
-
-O histórico apresenta **requisições**, **preços** e **varreduras completas/solicitadas** separadamente, além da origem e do teto efetivo de cada sessão. Uma requisição não representa seis meses completos; falhas e repetições entram nesse contador. Uma varredura completa corresponde a uma rota e permanência em todo o intervalo solicitado. Os campos novos não são inferidos retroativamente para sessões antigas.
-
-O projeto está em repositório público. A disponibilidade gratuita do wait timer deve ser reavaliada antes de torná-lo privado. A rotina não usa token pessoal nem transfere credenciais GitHub ao Supabase.
-
-### Tetos de publicação
-
-EUA: R$ 3.000; Europa: R$ 3.500, inclusive os valores exatos, por pessoa e ida e volta em dinheiro. A regra vale também para LATAM, antes da simulação de milhas. O preço do calendário continua sendo apenas descoberta: a tarifa do detalhe determina se a oferta será salva. Capturar uma tarifa acima do teto não é falha do Google. O painel registra esse descarte separadamente. Ofertas antigas acima do teto foram expiradas; seu histórico permanece no banco. Destinos de outras regiões mantêm o comportamento anterior.
-
-### Composição executada por sessão
-
-O Monitor de sessões agrupa origem × destino e mostra o intervalo solicitado ao calendário, permanências, preços capturados e faixas de ida/volta que chegaram à consulta detalhada. “Ver períodos por permanência” abre cada captura e cada grupo de detalhes. As faixas resumem a primeira e a última data observadas e não representam cobertura contínua. Falhas, resultados parciais e lacunas de registros são indicados.
-
-A RPC `get_session_composition` consulta todos os registros da sessão, independentemente do limite visual de eventos, e exige administrador ativo. Durante a execução ela agrega `calendar_jobs` e `scan_events`; no encerramento, o banco preserva o resumo em `scan_session_summaries`, com RLS administrativa. Assim, o resumo continua disponível quando os dados brutos expiram após sete dias. Sessões antigas são reconstruídas somente com os dados ainda disponíveis. Campos de período ausentes permanecem como “Não registrado”. Nenhuma nova consulta ao Google é feita para gerar esse resumo.
-
-### Alertas de tarifas no Telegram
-
-A trigger `offers_telegram_alert` enfileira notificações de ofertas novas ou com preço/companhia diferente. A mesma rota, datas, preço e companhias não repetem o alerta. Ofertas acima dos tetos são rejeitadas antes da trigger; ofertas expiradas ou substituídas são descartadas da fila.
-
-O destinatário fixo fica em `private.telegram_settings`. O token do bot fica criptografado no Vault com o nome `orbita_telegram_bot_token`. Nenhum deles entra no frontend, no GitHub ou na fila HTTP. A fila do `pg_net` contém apenas UUID e nonce descartável; a Edge Function `telegram-alert` usa sua identidade de serviço para buscar a mensagem e o destinatário no banco e enviar ao Telegram. As RPCs de claim/confirmação só aceitam `service_role`; clientes não escolhem texto ou destinatário. A função aceita somente despachos pendentes e cada nonce só pode ser consumido uma vez.
-
-O envio acontece após o commit da oferta. Falhas transitórias, 429 e timeout permitem até três tentativas, com espera progressiva e respeito a `retry_after`. O cron `orbita-telegram-alerts` verifica a fila a cada minuto e recupera despachos sem confirmação após cinco minutos. Timeout pode causar uma duplicata se o Telegram recebeu a primeira tentativa sem devolver confirmação. Alertas e histórico desse cron têm retenção de 90 dias e um dia, respectivamente.
-
-A mensagem inclui rota, datas, duração, companhia identificada na ida, conexões, preço ida e volta por pessoa e botão do Google Flights. Só LATAM exclusiva recebe a projeção de 25–30%, identificada como estimativa sem confirmação de resgate. Para rotacionar o token, atualize somente o segredo no Vault; o código não muda. Para pausar o envio, use `enabled=false` na configuração privada pelo SQL administrativo.
-
-Os testes locais executam as mesmas migrations com dublês de pg_net, Vault e pg_cron, sem enviar mensagens. Eles validam deduplicação, segredo fora da fila, nonce, confirmação, repetição limitada, tarifas expiradas e permissões. A entrega real é verificada com uma mensagem explicitamente identificada como teste, sem criar uma passagem fictícia no catálogo.
+O Pro tem liberação administrativa e registro de interesse; não há cobrança ou renovação automática. Configure SMTP próprio antes de abrir os cadastros ao público. Domínio próprio, identificação do operador, contato de privacidade e termos definitivos continuam necessários para o lançamento.

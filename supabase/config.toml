@@ -1,10 +1,5 @@
 project_id = "orbita-milhas"
 
-[functions.scan-api]
-# A própria função verifica assinatura, validade e claims do JWT OIDC GitHub.
-verify_jwt = false
-
-
-[functions.calendar-api]
-# Valida a sessão em Supabase Auth e o perfil ativo no banco.
+[functions.telegram-alert]
+# O relay exige um nonce de despacho de uso único; apenas o servidor lê o bot.
 verify_jwt = false

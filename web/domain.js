@@ -1,11 +1,5 @@
-import farePolicy from '../fare-policy.json' with {type:'json'};
-export const money = n => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0}).format(Number(n)||0);
-export const fareCaps=farePolicy.caps;
-export function fareCap(offer){
-  const region=farePolicy.destination_regions[String(offer.destination||'').trim().toUpperCase()]||farePolicy.country_regions[String(offer.country||'').trim().toLowerCase()]||farePolicy.region_names[String(offer.region||'').trim().toLowerCase()];
-  return fareCaps[region]??null;
-}
-export function offerAllowed(offer){const cap=fareCap(offer);return typeof offer.price_brl==='number'&&Number.isFinite(offer.price_brl)&&offer.price_brl>0&&(cap===null||offer.price_brl<=cap);}
+export const money = n => {const value=Number(n)||0;return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:2,minimumFractionDigits:Number.isInteger(value)?0:2}).format(value);};
+export function offerAllowed(offer){return typeof offer.price_brl==='number'&&Number.isFinite(offer.price_brl)&&offer.price_brl>0;}
 export const number = n => new Intl.NumberFormat('pt-BR').format(Number(n)||0);
 export const escape = value => String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export function estimate(price, costPerThousand=20, taxes=350, discount=.275) {
@@ -22,7 +16,6 @@ export const destinations=[
  ['LIS','Lisboa','Portugal','Europa'],['MAD','Madri','Espanha','Europa'],['BCN','Barcelona','Espanha','Europa'],['CDG','Paris','França','Europa'],['LHR','Londres','Reino Unido','Europa'],['FCO','Roma','Itália','Europa'],['MXP','Milão','Itália','Europa'],['FRA','Frankfurt','Alemanha','Europa'],
  ['NRT','Tóquio','Japão','Ásia'],['ICN','Seul','Coreia do Sul','Ásia'],['BKK','Bangkok','Tailândia','Ásia']
 ].map(([code,city,country,region])=>({code,city,country,region,enabled:!['NRT','ICN','BKK'].includes(code)}));
-export const defaultSettings={id:1,enabled:true,origins:origins.map(o=>o[0]),destinations,min_days:7,max_days:20,horizon_months:6,query_budget:1000,search_mode:'rolling',search_strategy:'hybrid',max_stops:2};
 export function addDays(offset){const d=new Date();d.setDate(d.getDate()+offset);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
 export const demoOffers=[
  ['MIA','Miami','Estados Unidos','EUA','FLN',2790,28,13,1,'miami'],
@@ -37,17 +30,3 @@ export const demoOffers=[
 
 export function hasLatamProjection(offer){return Array.isArray(offer.airlines)&&offer.airlines.length===1&&offer.airlines[0]==='LA';}
 export function airlineLabel(offer){return (offer.airline_names?.length?offer.airline_names:offer.airlines?.map(c=>c==='LA'?'LATAM':c)||['Companhia não identificada']).join(' + ');}
-
-export function calendarCandidates(entries,limit=2){
-  const unique=new Map();
-  for(const entry of entries){
-    const key=[entry.origin,entry.destination,entry.departure_date,entry.return_date].join('|');
-    if(!unique.has(key)||entry.price_brl<unique.get(key).price_brl)unique.set(key,entry);
-  }
-  const counts=new Map();
-  return [...unique.values()].sort((a,b)=>a.price_brl-b.price_brl||a.departure_date.localeCompare(b.departure_date)).filter(entry=>{
-    const group=[entry.origin,entry.destination,entry.stay_days].join('|'),count=counts.get(group)||0;
-    if(count>=limit)return false;
-    counts.set(group,count+1);return true;
-  });
-}
