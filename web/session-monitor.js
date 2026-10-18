@@ -1,6 +1,7 @@
 import {escape as e,number} from './domain.js';
 import {icon} from './icons.js';
 import {runOrigin,sweepsLabel} from './scan-history.js';
+import {sessionCompositionView} from './session-composition.js';
 
 const phases={planning:'Preparando pesquisas',calendar:'Lendo calendários',detail:'Consultando detalhes',backoff:'Aguardando nova tentativa',finished:'Sessão encerrada',failed:'Execução interrompida',legacy:'Diagnóstico anterior'};
 const states={running:'Em execução',completed:'Concluída',partial:'Parcial',failed:'Falhou'};
@@ -28,7 +29,15 @@ function previewData(){
  ]};
 }
 
-export function sessionMonitorView({runs=[],selectedId=null,events=[],updatedAt=null,error='',demo=false,onlyErrors=false}={}){
+function previewComposition(){return {run_id:'example',detail_attempts_expected:52,detail_attempts_recorded:52,calendars:[
+ {origin:'FLN',destination:'MIA',departure_start:'2026-10-18',departure_end:'2027-04-17',min_days:7,max_days:20,status:'completed',prices:2548,completed_sweeps:14,requested_sweeps:14},
+ {origin:'CWB',destination:'LIS',departure_start:'2026-10-18',departure_end:'2027-04-17',min_days:7,max_days:20,status:'partial',prices:1732,completed_sweeps:7,requested_sweeps:14}
+ ],details:[
+ {origin:'FLN',destination:'MIA',stay_days:10,departure_start:'2026-11-07',departure_end:'2026-11-16',return_start:'2026-11-17',return_end:'2026-11-26',attempts:2,dates_attempted:2,dates_completed:2,errors:0,filtered:1},
+ {origin:'CWB',destination:'LIS',stay_days:14,departure_start:'2026-11-02',departure_end:'2027-03-20',return_start:'2026-11-16',return_end:'2027-04-03',attempts:50,dates_attempted:49,dates_completed:47,errors:3,filtered:9}
+ ]};}
+
+export function sessionMonitorView({runs=[],selectedId=null,events=[],composition=null,updatedAt=null,error='',demo=false,onlyErrors=false}={}){
  const sample=demo&&!runs.length?previewData():null;
  const latest=runs[0],run=sample?.run||runs.find(r=>r.id===selectedId)||latest;
  if(sample)events=sample.events;
@@ -47,6 +56,7 @@ export function sessionMonitorView({runs=[],selectedId=null,events=[],updatedAt=
  <div class="session-stats"><article><span>Preços no calendário</span><strong>${number(run.calendar_entries)}</strong><small>${m.coverage!==null?percent(m.coverage)+' da matriz com preço capturado':'Cobertura única não registrada nesta versão'}</small></article><article><span>Detalhes concluídos</span><strong>${number(run.detail_dates_checked)} <em>/ ${number(run.detail_queries)}</em></strong><small>Datas concluídas / tentativas de consulta</small></article><article><span>Tarifas salvas</span><strong>${number(run.offers_found)}</strong><small>${run.offers_price_filtered==null?'Filtro de preço não registrado nesta versão':number(run.offers_price_filtered)+' descartadas acima do teto'}</small></article><article><span>Falhas registradas</span><strong>${number(run.errors_count)}</strong><small>${number(run.retries_count)} ${run.retries_count===1?'repetição de detalhe':'repetições de detalhe'} · ${number(run.recovered_queries)} ${run.recovered_queries===1?'consulta recuperada':'consultas recuperadas'}</small></article></div>
  <div class="session-footnotes"><span>${e(runOrigin(run))}</span><span>${number(run.calendar_queries)} tentativas de calendário</span><span>Varreduras completas / solicitadas: ${e(sweepsLabel(run))}</span><span>${number(run.empty_results)} consultas sem tarifa válida</span><span>Matriz: ${number(run.total_combinations)} combinações</span>${link?`<a href="${e(link)}" target="_blank" rel="noopener noreferrer">Abrir execução no GitHub ${icon('arrow')}</a>`:''}</div>
  ${!run.diagnostics_version?'<div class="session-notice">Esta sessão é anterior ao novo diagnóstico. Seus contadores foram preservados; o motivo original das falhas não foi registrado.</div>':''}
+ ${sessionCompositionView(sample?previewComposition():composition,run)}
  ${counters.length?`<div class="session-errors"><h3>Falhas por causa</h3>${counters.map(([key,count])=>`<div class="session-error-row"><span>${e(causes[key]||key)}</span><div><i style="width:${Math.min(100,Number(count)/max*100)}%"></i></div><b>${number(count)}</b></div>`).join('')}</div>`:''}
  <div class="session-events-heading"><div><h3>Consultas e diagnósticos</h3><p>Últimos eventos desta sessão. Registros detalhados disponíveis por 7 dias.</p></div><button class="session-filter ${onlyErrors?'active':''}" id="monitor-errors" aria-pressed="${onlyErrors}">${icon('filter')} ${onlyErrors?'Mostrando falhas':'Somente falhas'}</button></div>
  ${visibleEvents.length?`<div class="table-scroll session-events"><table><thead><tr><th>Hora</th><th>Etapa / rota</th><th>Resultado</th><th>Diagnóstico</th><th>Tempo</th></tr></thead><tbody>${visibleEvents.map(event=>`<tr><td>${time(event.created_at)}</td><td><b>${e(stages[event.stage]||event.stage)}</b>${event.origin?`<small class="block">${e(event.origin)} → ${e(event.destination)}${event.stay_days?' · '+e(event.stay_days)+' dias':''}</small>`:''}${event.departure_date?`<small class="block">${e(event.departure_date)} → ${e(event.return_date)}</small>`:''}</td><td><span class="session-result ${event.outcome==='error'?'error':event.outcome==='success'?'success':''}">${e(outcomes[event.outcome]||event.outcome)}</span>${event.attempt>1?`<small class="block">Tentativa ${number(event.attempt)}</small>`:''}</td><td>${event.error_code?`<b>${e(causes[event.error_code]||event.error_code)}</b><small class="block">${e(event.cause_type||'')}${event.http_status?' · HTTP '+number(event.http_status):''}</small>`:''}<p>${e(event.message||'—')}</p></td><td>${duration(event.duration_ms==null?NaN:event.duration_ms/1000)}</td></tr>`).join('')}</tbody></table></div>`:`<div class="session-events-empty">${icon('search')}<p>${onlyErrors?'Nenhuma falha entre os eventos carregados.':'Os próximos eventos aparecerão aqui automaticamente.'}</p></div>`}`:`<div class="session-events-empty">${icon('radar')}<h3>Pronto para acompanhar o motor.</h3><p>A próxima sessão mostrará aqui o progresso, as rotas pesquisadas e as causas de falha.</p></div>`}

@@ -38,7 +38,7 @@ Deno.serve(async(req:Request)=>{
    if(table==='scanner_state'||table==='scanner_settings')query.id='eq.1';
   }else if(method==='POST'&&writeTables.has(table)){
    if(table==='scan_events'){
-    const allowed=new Set(['run_id','created_at','stage','outcome','origin','destination','departure_date','return_date','stay_days','attempt','duration_ms','error_code','cause_type','message','http_status','retryable']);
+    const allowed=new Set(['run_id','created_at','stage','outcome','origin','destination','departure_date','return_date','stay_days','attempt','duration_ms','error_code','cause_type','message','http_status','retryable','departure_start','departure_end','min_days','max_days']);
     if(!Array.isArray(data)||!data.length||data.length>50||data.some(row=>!row||typeof row!=='object'||Object.keys(row).some(k=>!allowed.has(k))||!uuid.test(String(row.run_id))||!['planning','calendar','detail','system'].includes(row.stage)||!['started','success','empty','filtered','error','retry','finished'].includes(row.outcome)||row.message&&String(row.message).length>500))return response({error:'Eventos inválidos'},400);
     prefer='return=minimal';
    }else if(!data||typeof data!=='object'||Array.isArray(data))return response({error:'Dados inválidos'},400);

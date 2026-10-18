@@ -89,3 +89,9 @@ O projeto está em repositório público. A disponibilidade gratuita do wait tim
 ### Tetos de publicação
 
 EUA: R$ 3.000; Europa: R$ 3.500, inclusive os valores exatos, por pessoa e ida e volta em dinheiro. A regra vale também para LATAM, antes da simulação de milhas. O preço do calendário continua sendo apenas descoberta: a tarifa do detalhe determina se a oferta será salva. Capturar uma tarifa acima do teto não é falha do Google. O painel registra esse descarte separadamente. Ofertas antigas acima do teto foram expiradas; seu histórico permanece no banco. Destinos de outras regiões mantêm o comportamento anterior.
+
+### Composição executada por sessão
+
+O Monitor de sessões agrupa origem × destino e mostra o intervalo solicitado ao calendário, permanências, preços capturados e faixas de ida/volta que chegaram à consulta detalhada. “Ver períodos por permanência” abre cada captura e cada grupo de detalhes. As faixas resumem a primeira e a última data observadas e não representam cobertura contínua. Falhas, resultados parciais e lacunas de registros são indicados.
+
+A RPC `get_session_composition` consulta todos os registros da sessão, independentemente do limite visual de eventos, e exige administrador ativo. Durante a execução ela agrega `calendar_jobs` e `scan_events`; no encerramento, o banco preserva o resumo em `scan_session_summaries`, com RLS administrativa. Assim, o resumo continua disponível quando os dados brutos expiram após sete dias. Sessões antigas são reconstruídas somente com os dados ainda disponíveis. Campos de período ausentes permanecem como “Não registrado”. Nenhuma nova consulta ao Google é feita para gerar esse resumo.

@@ -65,6 +65,18 @@ class RecoveryTests(unittest.TestCase):
   self.assertEqual(len(store.rows),3)
   self.assertFalse(store.rows[0]['retryable'])
   self.assertIsNone(store.rows[0]['error_code'])
+ def test_calendar_scope_is_structured_and_all_bulk_rows_keep_the_same_keys(self):
+  class Store:
+   def request(self,table,method,data,**kwargs):self.rows=list(data)
+  store=Store();reporter=SessionReporter(store,'run')
+  scope={'origin':'FLN','destination':'MIA','departure_start':'2026-10-18','departure_end':'2027-04-17','min_days':7,'max_days':20}
+  reporter.event('calendar','error',context=scope,diagnostic=diagnose(TimeoutError('Timeout')))
+  reporter.event('detail','empty',Search('FLN','MIA',date(2026,11,7),date(2026,11,17)))
+  reporter.flush_events()
+  self.assertEqual(set(store.rows[0]),set(store.rows[1]))
+  self.assertEqual(store.rows[0]['departure_start'],'2026-10-18')
+  self.assertEqual(store.rows[0]['min_days'],7)
+  self.assertIsNone(store.rows[1]['departure_start'])
  @patch.dict('os.environ',{'QUERY_BUDGET_OVERRIDE':'0'})
  def test_event_persistence_failure_still_closes_run(self):
   class Store(FakeStore):

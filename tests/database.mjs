@@ -100,6 +100,47 @@ await assert.rejects(db.exec("update public.scan_events set message='tampered'")
 await db.exec('reset role;set role anon');
 await assert.rejects(db.query('select * from public.scan_events'),/permission denied/,'diagnósticos não são públicos');
 await db.exec('reset role');
+// Session composition: complete aggregation, access control, and durable snapshots.
+const compositionRun=(await db.query("insert into public.scan_runs(detail_queries,diagnostics_version) values(69,1) returning id")).rows[0].id;
+const calendarRequest={origin:'FLN',destination:'MIA',departure_start:'2026-10-18',departure_end:'2027-04-17',min_days:7,max_days:8,max_stops:2};
+await db.query(`insert into public.calendar_jobs(run_id,request,cache_key,status,result) values($1,$2,$3,'partial','{"priced_combinations":120,"completed_sweeps":0,"requested_sweeps":2}')`,[compositionRun,JSON.stringify(calendarRequest),'c'.repeat(64)]);
+await db.query(`insert into public.scan_events(run_id,stage,outcome,origin,destination,departure_date,return_date,stay_days) values
+ ($1,'detail','error','FLN','MIA','2026-11-07','2026-11-17',10),
+ ($1,'detail','retry','FLN','MIA','2026-11-07','2026-11-17',10),
+ ($1,'detail','success','FLN','MIA','2026-11-07','2026-11-17',10),
+ ($1,'detail','filtered','FLN','MIA','2026-11-16','2026-11-26',10),
+ ($1,'detail','empty','CWB','LIS','2026-12-01','2026-12-15',14),
+ ($1,'calendar','error','FLN','MIA',null,null,null)`,[compositionRun]);
+await db.query(`insert into public.scan_events(run_id,stage,outcome,origin,destination,departure_date,return_date,stay_days)
+ select $1,'detail','empty','FLN','MIA',date '2027-01-01'+n,date '2027-01-08'+n,7 from generate_series(1,65) n`,[compositionRun]);
+await db.query(`insert into public.scan_events(run_id,stage,outcome,origin,destination,departure_start,departure_end,min_days,max_days)
+ values($1,'calendar','error','CWB','JFK','2026-10-18','2027-04-17',9,10)`,[compositionRun]);
+await as(b);
+await assert.rejects(db.query('select public.get_session_composition($1)',[compositionRun]),/administrativo/,'membro não acessa composição administrativa');
+assert.equal((await db.query('select count(*)::int n from public.scan_session_summaries')).rows[0].n,0);
+await as(admin);
+const composition=(await db.query('select public.get_session_composition($1) result',[compositionRun])).rows[0].result;
+assert.equal(composition.detail_attempts_recorded,69,'resumo considera mais de 60 eventos');
+assert.equal(composition.calendars.length,2,'captura parcial não é duplicada pelo evento de erro');
+const observed=composition.details.find(d=>d.stay_days===10);
+assert.equal(observed.attempts,3,'evento retry não é outra chamada');
+assert.equal(observed.dates_attempted,2,'tentativa repetida não cria outro par de datas');
+assert.equal(observed.dates_completed,2);
+assert.equal(observed.filtered,1);
+assert.equal(observed.return_end,'2026-11-26');
+assert.equal(composition.calendars.find(c=>c.destination==='JFK').departure_start,'2026-10-18','falha preserva o período solicitado');
+await assert.rejects(db.exec('delete from public.scan_session_summaries'),/permission denied/,'cliente admin não forja resumos');
+await db.exec('reset role;set role service_role');
+await db.query("update public.scan_runs set status='completed',detail_queries=70,finished_at=now() where id=$1",[compositionRun]);
+assert.equal((await db.query('select count(*)::int n from public.scan_session_summaries where run_id=$1',[compositionRun])).rows[0].n,1,'encerramento pelo worker cria snapshot');
+await db.query('delete from public.scan_events where run_id=$1',[compositionRun]);
+await db.query('delete from public.calendar_jobs where run_id=$1',[compositionRun]);
+await as(admin);
+assert.deepEqual((await db.query('select public.get_session_composition($1) result',[compositionRun])).rows[0].result,{...composition,detail_attempts_expected:70},'composição permanece depois da retenção dos dados brutos');
+await db.exec('reset role;set role anon');
+await assert.rejects(db.query('select public.get_session_composition($1)',[compositionRun]),/permission denied/);
+await assert.rejects(db.query('select * from public.scan_session_summaries'),/permission denied/);
+await db.exec('reset role');
 const rls=await db.query("select tablename from pg_tables where schemaname in ('public','private') and rowsecurity=false");
 assert.equal(rls.rows.length,0,'RLS em todas as tabelas do produto');
 console.log('Banco validado: isolamento, limites Free/Pro, bloqueio de elevação de privilégio, suspensão e acesso administrativo.');

@@ -12,12 +12,12 @@ class SessionReporter:
     def event(self,stage,outcome,query=None,diagnostic=None,attempt=1,duration_ms=None,message=None,context=None):
         row={'run_id':self.run_id,'stage':stage,'outcome':outcome,'attempt':attempt,'created_at':datetime.now(timezone.utc).isoformat()}
         # PostgREST bulk inserts require exactly the same keys in every row.
-        row.update({key:None for key in ('origin','destination','departure_date','return_date','stay_days','duration_ms','error_code','cause_type','message','http_status')})
+        row.update({key:None for key in ('origin','destination','departure_date','return_date','stay_days','duration_ms','error_code','cause_type','message','http_status','departure_start','departure_end','min_days','max_days')})
         row['retryable']=False
         if query:
             row.update(origin=query.origin,destination=query.destination,departure_date=str(query.departure),return_date=str(query.returning),stay_days=(query.returning-query.departure).days)
         elif context:
-            row.update({key:context[key] for key in ('origin','destination','stay_days') if key in context})
+            row.update({key:context[key] for key in ('origin','destination','stay_days','departure_start','departure_end','min_days','max_days') if key in context})
         if duration_ms is not None:row['duration_ms']=min(20000000,max(0,round(duration_ms)))
         if diagnostic:
             row.update(error_code=diagnostic['code'],cause_type=diagnostic['cause_type'],message=safe_message(diagnostic['message']),http_status=diagnostic.get('http_status'),retryable=diagnostic.get('retryable',False))
