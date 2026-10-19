@@ -42,6 +42,9 @@ export function monthFacets(offers,filters,today){
  const keys=new Set(filters.months||[]),base=new Date(today+'T12:00:00Z');base.setUTCDate(1);
  for(let offset=0;offset<=6;offset++){const month=new Date(base);month.setUTCMonth(base.getUTCMonth()+offset);keys.add(month.toISOString().slice(0,7));}
  for(const offer of offers)keys.add(offer.departure_date.slice(0,7));
+ // Include empty months between dates in the feed, without expanding distant URL outliers indefinitely.
+ const extent=Math.max(6,...[...keys].map(key=>(Number(key.slice(0,4))-base.getUTCFullYear())*12+Number(key.slice(5,7))-1-base.getUTCMonth()));
+ for(let offset=7;offset<=Math.min(extent,36);offset++){const month=new Date(base);month.setUTCMonth(base.getUTCMonth()+offset);keys.add(month.toISOString().slice(0,7));}
  const counts=new Map();for(const offer of filterOffers(offers,{...filters,months:[]})){const key=offer.departure_date.slice(0,7);counts.set(key,(counts.get(key)||0)+1);}
  return [...keys].sort().map(key=>({key,count:counts.get(key)||0}));
 }

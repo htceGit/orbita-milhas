@@ -31,6 +31,8 @@ test('botões de mês contam opções com os demais filtros e distinguem anos',(
  const facets=monthFacets(offers,{...createFilters(),origin:['FLN'],months:['2026-11']},'2026-10-31');
  assert.equal(facets.find(m=>m.key==='2026-11').count,1);assert.equal(facets.find(m=>m.key==='2026-12').count,1,'selecionar novembro não esconde dezembro');assert.equal(facets.find(m=>m.key==='2027-01').count,0);assert.ok(facets.some(m=>m.key==='2027-04'));
  assert.equal(monthFacets(offers,createFilters(),'2026-10-31').find(m=>m.key==='2026-11').count,2);
+ const extended=monthFacets([...offers,{...offers[0],departure_date:'2027-09-03'}],createFilters(),'2026-10-31');
+ assert.equal(extended.find(m=>m.key==='2027-07').count,0,'meses intermediários sem tarifa também aparecem');
 });
 test('remover uma seleção mantém as demais e os filtros vazios não geram chips',()=>{
  assert.deepEqual(toggleValue(['FLN','GRU'],'FLN'),['GRU']);assert.deepEqual(toggleValue(['FLN'],'GRU'),['FLN','GRU']);assert.deepEqual(appliedFilters(createFilters()),[]);
