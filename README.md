@@ -1,6 +1,6 @@
 # Órbita · Portal de oportunidades internacionais
 
-Portal público de promoções em HTML/CSS/JavaScript, publicado no [GitHub Pages](https://htcegit.github.io/orbita-milhas/). Ofertas em lista, filtros combinados, favoritas locais e compartilhamento de tarifas. Não há cadastro, login obrigatório ou divulgação de planos Pro na experiência pública. A entrada administrativa continua protegida pelo Supabase Auth.
+Portal público de promoções em HTML/CSS/JavaScript, publicado no [GitHub Pages](https://htcegit.github.io/orbita-milhas/). Ofertas agrupadas por origem × destino, filtros com múltipla seleção, favoritas locais e compartilhamento de tarifas. Não há cadastro, login obrigatório ou divulgação de planos Pro na experiência pública. A entrada administrativa continua protegida pelo Supabase Auth.
 
 O coletor é um projeto externo operado pelo proprietário no Railway. **Este repositório não contém nem agenda pesquisas de voos.** Os únicos workflows ativos são verificação e publicação do portal.
 
@@ -8,7 +8,7 @@ O coletor é um projeto externo operado pelo proprietário no Railway. **Este re
 
 O portal lê `public.tarifaspromo` com a chave pública, sem sessão de usuário. RLS permite a visitantes e usuários autenticados somente a leitura de tarifas positivas com partida atual ou futura em Brasília. A gravação continua exclusiva do coletor, com sua chave de servidor. Perfis, favoritos de contas antigas e configurações do Telegram continuam privados. O cliente público é separado do cliente de autenticação administrativa, para que uma sessão antiga não interrompa a consulta pública.
 
-A consulta usa datas futuras ou o dia atual em Brasília. Campos em português são adaptados em `web/tarifas.js`; IDs bigint são recebidos como texto para preservar a precisão. O portal mostra todas as tarifas válidas recebidas, **sem reaplicar os tetos do coletor antigo e sem inventar expiração**. Filtros de preço, origem, destino/país/companhia, região, partida, permanência, tipo de viagem e voos diretos são escolhas do visitante. A busca ignora acentos; filtros ficam na URL e podem ser compartilhados. A leitura percorre páginas de 500 registros, até 10.000 tarifas mais baratas por consulta; o portal informa quando atingir esse limite. A tela mostra inicialmente 24 linhas e oferece “Ver mais”. A ordenação permite menor preço, atualização mais recente, próxima partida e menor permanência.
+A consulta usa datas futuras ou o dia atual em Brasília. Campos em português são adaptados em `web/tarifas.js`; IDs bigint são recebidos como texto para preservar a precisão. O portal mostra todas as tarifas válidas recebidas, **sem reaplicar os tetos do coletor antigo e sem inventar expiração**. Origem, destino, região, companhia, mês de ida e tipo de viagem aceitam múltiplas seleções. Botões de mês mostram mês, ano e quantidade de opções, respeitando os demais filtros. Seleções dentro de uma categoria se somam; categorias diferentes se cruzam. Preço máximo, datas exatas, permanência e voos diretos refinam a busca. A busca textual ignora acentos. Filtros ficam na URL, com parâmetros repetidos para as seleções múltiplas; links antigos continuam válidos. A leitura percorre páginas de 500 registros, até 10.000 tarifas mais baratas por consulta; o portal informa quando atingir esse limite. A tela mostra até 24 rotas recolhidas. Cada resumo indica a menor tarifa e a quantidade de opções para os filtros atuais. Só ao expandir uma rota são renderizadas suas opções: 12 por vez, com botão para carregar mais. Rotas abertas são preservadas durante filtragens e atualização do feed na mesma visita. A ordenação permite menor preço, atualização mais recente, próxima partida e menor permanência; a ordem das rotas acompanha a primeira opção de cada grupo nessa ordenação.
 
 A aba ativa verifica atualizações a cada minuto, preservando os filtros e a quantidade de linhas abertas. Uma falha de atualização mantém os últimos dados e mostra aviso. A data nos detalhes indica a atualização recebida do coletor. O portal não simula estado, agenda ou cobertura do motor externo.
 
@@ -36,7 +36,7 @@ npm run build
 npm run dev
 ```
 
-Demonstração: `http://127.0.0.1:4173/?demo=1`. Usa dados fictícios e armazenamento local, separados das contas e dos dados reais. `public-config.json` só contém URL e chave pública. Variáveis `PUBLIC_SUPABASE_URL` e `PUBLIC_SUPABASE_PUBLISHABLE_KEY` podem substituí-las no build. Nunca incorpore uma chave de servidor no frontend.
+Demonstração: `http://127.0.0.1:4173/?demo=1`. Usa três datas fictícias por rota e armazenamento local, separados das contas e dos dados reais. `public-config.json` só contém URL e chave pública. Variáveis `PUBLIC_SUPABASE_URL` e `PUBLIC_SUPABASE_PUBLISHABLE_KEY` podem substituí-las no build. Nunca incorpore uma chave de servidor no frontend.
 
 Os testes de banco usam PGlite e doubles locais de Vault/pg_net/Cron, sem enviar mensagens. As migrações históricas são mantidas para reconstruir o esquema; as migrações finais retiram as tabelas e funções do coletor antigo e migram os alertas para a fonte externa.
 
