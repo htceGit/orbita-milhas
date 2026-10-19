@@ -1,5 +1,6 @@
 /** Read-only adapter for the external collector's public.tarifaspromo contract. */
-import {destinations,origins} from './domain.js';
+import {destinations} from './domain.js';
+import {airportLabel} from './airports.js';
 export const TARIFA_COLUMNS='id::text,origem,destino,origem_nome,destino_nome,tipo_viagem,duracao_dias,data_ida,data_volta,preco,companhia,voos,horario_partida,horario_chegada,duracao_total,escalas,aeronave,link_google_voos,criado_em,atualizado_em';
 const text=value=>typeof value==='string'?value.trim():'';
 const plain=value=>text(value).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
@@ -25,9 +26,9 @@ export function normalizeTarifa(row){
  const stops=/^(direto|sem (?:escalas|paradas)|non.?stop)$/i.test(stopsText)?0:stopMatch?Number(stopMatch[1]):null;
  const updated=text(row.atualizado_em)||text(row.criado_em);
  const collected=Number.isFinite(Date.parse(updated))?updated:null;
- return {id,source:'tarifaspromo',origin,destination,origin_name:text(row.origem_nome)||origins.find(([code])=>code===origin)?.[1]||origin,
-  city:meta?.city||text(row.destino_nome).split(/\s*\([A-Z0-9]{3}\)/)[0]||destination,
-  destination_name:text(row.destino_nome)||meta?.city||destination,country:meta?.country||'Internacional',region:meta?.region||'Outros',
+ return {id,source:'tarifaspromo',origin,destination,origin_name:airportLabel(row.origem_nome,origin),
+  city:airportLabel(row.destino_nome,destination),
+  destination_name:text(row.destino_nome)||destination,country:meta?.country||'Internacional',region:meta?.region||'Outros',
   departure_date:departure,return_date:oneWay?null:returning,stay_days:oneWay?null:dayDifference(departure,returning),trip_type:oneWay?'one_way':'round_trip',
   price_brl:price,airlines:[...codes],airline_names:names.length?names:['Companhia não informada'],carrier_validation:'outbound_only',stops,
   stops_description:stopsText,flight_numbers:text(row.voos),departure_time:text(row.horario_partida),arrival_time:text(row.horario_chegada),

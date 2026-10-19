@@ -1,7 +1,8 @@
+import {airportLabel,airportOptions} from './airports.js';
 import {createFilters,toggleValue,appliedFilters,readFilters,filterUrl,groupRoutes,monthFacets,monthName} from './catalogue.js';
 import {createClient} from '@supabase/supabase-js';
 import {icon} from './icons.js';
-import {money,number,escape as e,estimate,filterOffers,hasLatamProjection,airlineLabel,origins,demoOffers} from './domain.js';
+import {money,number,escape as e,estimate,filterOffers,hasLatamProjection,airlineLabel,demoOffers} from './domain.js';
 import {fetchTarifas,fareCurrent,feedSummary,tripLabel,stopsLabel,brasilToday} from './tarifas.js';
 
 const configured=Boolean(__SUPABASE_URL__&&__SUPABASE_KEY__);
@@ -14,12 +15,13 @@ let filters=createFilters(),sort='price',offers=[],feedMeta={total:0,limited:fal
 let page=location.hash==='#salvas'?'saved':location.hash==='#admin'?'admin':'offers';
 let adminDb=null,profile=null,members=[],adminStatus='loading',authMode='login',adminLoading=false;
 let toastTimer,searchTimer,lastOpener=null,focusAfterRender=null;
+let airportCatalogue={origins:[],destinations:[]};
 let displayRoutes=[];const openedRoutes=new Set(),routeLimits=new Map();
 const favoriteKey=demo?'orbita-preview-saved':'orbita-public-saved';
 let favorites=readSaved();
 const date=(value,year=false)=>new Date(value+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'short',...(year?{year:'numeric'}:{})}).replaceAll('.','').replaceAll(' de ',' ');
 const dateTime=value=>new Date(value).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
-const originName=o=>origins.find(([code])=>code===o.origin)?.[1]||o.origin_name?.split(' (')[0]||o.origin;
+const originName=o=>airportLabel(o.origin_name,o.origin);
 const isAdmin=()=>profile?.role==='admin'&&profile?.status==='active';
 
 function readSaved(){try{const value=JSON.parse(localStorage.getItem(favoriteKey)||'[]');return Array.isArray(value)?value.filter(id=>typeof id==='string').slice(0,1000):[];}catch{return [];}}
@@ -27,14 +29,14 @@ function toast(message){clearTimeout(toastTimer);const node=document.querySelect
 function check(result){if(result.error)throw result.error;return result.data;}
 function fail(error){console.error(error?.message||'Falha');toast('Não foi possível concluir. '+(error?.message||'Tente novamente.'));}
 function logo(){return `<a class="brand" href="#ofertas" aria-label="Órbita, página inicial"><img src="./favicon.svg" width="34" height="34" alt=""><span>órbita<span class="brand-dot">.</span></span></a>`;}
-function publicOrigins(){const map=new Map(origins.map(([code,name])=>[code,name]));for(const o of offers)if(!map.has(o.origin))map.set(o.origin,originName(o));return [...map];}
+function publicOrigins(){return airportCatalogue.origins;}
 
 function activeFilters(){return appliedFilters(filters);}
 function readUrl(){const parsed=readFilters(location.search);filters=parsed.filters;sort=parsed.sort;}
 function syncUrl(){history.replaceState(null,'',filterUrl(location.href,filters,sort));}
-function publicDestinations(){const map=new Map();for(const o of offers)map.set(o.destination,o.city);for(const code of filters.destination)if(!map.has(code))map.set(code,code);return [...map].sort((a,b)=>a[1].localeCompare(b[1],'pt-BR'));}
+function publicDestinations(){return airportCatalogue.destinations;}
 function menuLabel(key){const selected=filters[key];if(!selected.length)return key==='origin'?'Todos os aeroportos':'Todos os destinos';const options=key==='origin'?publicOrigins():publicDestinations();return selected.length===1?(options.find(([code])=>code===selected[0])?.[1]||selected[0]):selected.length+(key==='origin'?' origens selecionadas':' destinos selecionados');}
-function multiMenu(key,title,choices){return `<details class="multi-filter" id="filter-${key}"><summary aria-label="${title}: ${e(menuLabel(key))}"><span class="field-kicker">${title}</span><span class="multi-summary">${icon(key==='origin'?'plane':'pin')}<span data-selection-label="${key}">${e(menuLabel(key))}</span><span class="selection-count" data-selection-count="${key}" ${filters[key].length?'':'hidden'}>${filters[key].length}</span>${icon('down')}</span></summary><button type="button" class="multi-backdrop" data-close-multi="${key}" aria-label="Fechar filtro de ${key==='origin'?'origens':'destinos'}"></button><div class="multi-panel"><div class="multi-panel-heading"><strong>${key==='origin'?'Escolha suas origens':'Escolha seus destinos'}</strong><small>Selecione uma ou mais opções.</small></div><label class="menu-search">${icon('search')}<input type="search" data-menu-search="${key}" placeholder="${key==='origin'?'Buscar aeroporto':'Buscar destino'}" aria-label="${key==='origin'?'Buscar nas origens':'Buscar nos destinos'}"></label><div class="multi-options">${choices.map(([value,label])=>`<label class="multi-option" data-option-label="${e(label+' '+value)}"><input type="checkbox" data-multi="${key}" value="${e(value)}" ${filters[key].includes(value)?'checked':''}><span>${e(label)}<small>${e(value)}</small></span>${icon('check')}</label>`).join('')}${choices.length?'':'<p class="menu-empty">Aguardando destinos do catálogo.</p>'}</div><p class="menu-no-match" hidden>Nenhuma opção com esse nome.</p><div class="multi-footer"><button type="button" class="text-button" data-clear-multi="${key}">Limpar seleção</button><button type="button" class="menu-done" data-close-multi="${key}">Concluir ${icon('check')}</button></div></div></details>`;}
+function multiMenu(key,title,choices){return `<details class="multi-filter" id="filter-${key}"><summary aria-label="${title}: ${e(menuLabel(key))}"><span class="field-kicker">${title}</span><span class="multi-summary">${icon(key==='origin'?'plane':'pin')}<span data-selection-label="${key}">${e(menuLabel(key))}</span><span class="selection-count" data-selection-count="${key}" ${filters[key].length?'':'hidden'}>${filters[key].length}</span>${icon('down')}</span></summary><button type="button" class="multi-backdrop" data-close-multi="${key}" aria-label="Fechar filtro de ${key==='origin'?'origens':'destinos'}"></button><div class="multi-panel"><div class="multi-panel-heading"><strong>${key==='origin'?'Escolha suas origens':'Escolha seus destinos'}</strong><small>Selecione uma ou mais opções.</small></div><label class="menu-search">${icon('search')}<input type="search" data-menu-search="${key}" placeholder="${key==='origin'?'Buscar aeroporto':'Buscar destino'}" aria-label="${key==='origin'?'Buscar nas origens':'Buscar nos destinos'}"></label><div class="multi-options">${choices.map(([value,label])=>`<label class="multi-option" data-option-label="${e(label+' '+value)}"><input type="checkbox" data-multi="${key}" value="${e(value)}" ${filters[key].includes(value)?'checked':''}><span>${e(label)}<small>${e(value)}</small></span>${icon('check')}</label>`).join('')}${choices.length?'':'<p class="menu-empty">Aguardando tarifas do catálogo.</p>'}</div><p class="menu-no-match" hidden>Nenhuma opção com esse nome.</p><div class="multi-footer"><button type="button" class="text-button" data-clear-multi="${key}">Limpar seleção</button><button type="button" class="menu-done" data-close-multi="${key}">Concluir ${icon('check')}</button></div></div></details>`;}
 function setPage(next){location.hash=next==='saved'?'salvas':next==='admin'?'admin':'ofertas';if(page===next)render();}
 
 function render(){
@@ -143,7 +145,7 @@ async function loadFeed(manual=false){
  try{
   if(demo){offers=structuredClone(demoOffers);feedMeta={total:offers.length,limited:false};}
   else{if(!feedDb)throw new Error('Fonte indisponível');const result=await fetchTarifas(feedDb);offers=result.offers;feedMeta=result;}
-  feedLoaded=true;checkedAt=new Date().toISOString();
+  airportCatalogue=airportOptions(offers);feedLoaded=true;checkedAt=new Date().toISOString();
  }catch(error){console.error(error?.message||'Falha ao consultar tarifas');feedError='unavailable';}
  finally{feedLoading=false;if(page!=='admin'||adminStatus==='ready'){const active=document.activeElement;focusAfterRender=active?.id?'#'+active.id:null;render();}}
  if(manual&&!feedError)toast('Tarifas atualizadas. Boa viagem nos seus planos!');
