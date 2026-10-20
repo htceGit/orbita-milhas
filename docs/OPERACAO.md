@@ -2,7 +2,7 @@
 
 ## Separação de responsabilidades
 
-- Cloudflare Pages: destino preparado para o frontend do Órbita; implantação pelo GitHub descrita em [CLOUDFLARE_PAGES.md](CLOUDFLARE_PAGES.md). GitHub Pages continua ativo durante a transição.
+- Cloudflare Pages: destino preparado para o frontend do Órbita; implantação pelo GitHub descrita em [CLOUDFLARE_PAGES.md](CLOUDFLARE_PAGES.md). O workflow legado do GitHub Pages é somente manual e exige que a hospedagem esteja habilitada no repositório.
 - Supabase: Auth, contas, preferências, favoritos, radares pessoais, dados recebidos e alertas Telegram.
 - Motor externo: escreve em `public.tarifaspromo` com chave de servidor. Seu código, agenda e implantação pertencem a outro projeto.
 

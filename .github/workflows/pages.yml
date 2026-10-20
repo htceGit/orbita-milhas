@@ -1,8 +1,5 @@
-name: Publicar portal
+name: Publicar portal no GitHub Pages (manual)
 on:
-  push:
-    branches: [main]
-    paths-ignore: ['supabase/**', 'docs/**', '**.md']
   workflow_dispatch:
 permissions:
   contents: read

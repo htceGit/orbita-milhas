@@ -95,7 +95,7 @@ Referência: [domínios personalizados no Pages](https://developers.cloudflare.c
 
 Com a integração ativa, cada push para `main` dispara um novo deploy de produção no Cloudflare Pages. Alterações de tarifas chegam pelo Supabase e não precisam de novo deploy. Em **Deployments**, confira o commit publicado; se precisar, selecione uma implantação de produção anterior e use a opção de rollback disponível no painel.
 
-O workflow atual de GitHub Pages foi preservado durante a transição. Os dois hosts podem servir o mesmo frontend. Depois de validar o Cloudflare, o workflow `Publicar portal` poderá ser desativado no GitHub; mantenha o workflow `Verificações do portal`.
+O workflow `Publicar portal no GitHub Pages (manual)` está disponível somente para execução manual. Na preparação desta migração, a hospedagem GitHub Pages não estava habilitada no repositório. Para um eventual retorno, habilite Pages com GitHub Actions nas configurações do repositório e execute o workflow manualmente. O workflow `Verificações do portal` continua automático em pushes e pull requests. Depois de conectar o Cloudflare, as publicações serão feitas pela integração Git do próprio Pages.
 
 ## Diagnóstico rápido
 
