@@ -1,6 +1,6 @@
 # Órbita · Portal de oportunidades internacionais
 
-Portal público de promoções em HTML/CSS/JavaScript, preparado para Cloudflare Pages com integração GitHub. A publicação legada no GitHub Pages permanece disponível por workflow manual, caso a hospedagem seja habilitada novamente no repositório. Ofertas agrupadas por origem × destino, filtros com múltipla seleção, favoritas locais e compartilhamento de tarifas. Não há cadastro, login obrigatório ou divulgação de planos Pro na experiência pública. A entrada administrativa continua protegida pelo Supabase Auth.
+Portal público de promoções em HTML/CSS/JavaScript, publicado no [Cloudflare Pages](https://orbita-milhas.pages.dev/) com integração GitHub e deploy automático da branch `main`. A publicação legada no GitHub Pages permanece disponível por workflow manual, caso a hospedagem seja habilitada novamente no repositório. Ofertas agrupadas por origem × destino, filtros com múltipla seleção, favoritas locais e compartilhamento de tarifas. Não há cadastro, login obrigatório ou divulgação de planos Pro na experiência pública. A entrada administrativa continua protegida pelo Supabase Auth.
 
 O coletor é um projeto externo operado pelo proprietário no Railway. **Este repositório não contém nem agenda pesquisas de voos.** Os únicos workflows ativos são verificação e publicação do portal.
 

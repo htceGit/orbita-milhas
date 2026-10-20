@@ -1,6 +1,10 @@
 # Publicar o Órbita no Cloudflare Pages pelo GitHub
 
-O código está preparado para importar o repositório existente. A criação do projeto Pages e a autorização da integração com GitHub são feitas na sua conta Cloudflare, seguindo este guia. O endereço de produção só será conhecido depois dessa criação.
+O projeto `orbita-milhas` está publicado em **https://orbita-milhas.pages.dev/**, conectado a `htceGit/orbita-milhas`, branch de produção `main`. Build, pasta `dist` e variável `SKIP_DEPENDENCY_INSTALL=1` estão configurados no Pages. Novos pushes para `main` disparam a publicação automática.
+
+No Supabase, Site URL já é `https://orbita-milhas.pages.dev/`; a lista de retornos contém essa raiz e `https://orbita-milhas.pages.dev/#admin`, preservando também o endereço antigo do GitHub Pages. A leitura pública, filtros por mês, expansão de rotas e detalhes de tarifas reais foram conferidos no domínio novo, assim como HTTPS e os cabeçalhos de segurança/cache.
+
+Os passos abaixo documentam a configuração para manutenção ou recriação. Para atualizar este portal, basta enviar o código ao repositório existente; não crie outro projeto Pages.
 
 O Cloudflare hospeda somente o frontend estático. O Supabase atual continua fornecendo as tarifas e a autenticação administrativa; o coletor no Railway e os alertas Telegram continuam funcionando nos ambientes atuais. Nenhuma migração de banco é necessária para esta mudança de hospedagem.
 

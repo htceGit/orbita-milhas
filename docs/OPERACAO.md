@@ -2,7 +2,7 @@
 
 ## Separação de responsabilidades
 
-- Cloudflare Pages: destino preparado para o frontend do Órbita; implantação pelo GitHub descrita em [CLOUDFLARE_PAGES.md](CLOUDFLARE_PAGES.md). O workflow legado do GitHub Pages é somente manual e exige que a hospedagem esteja habilitada no repositório.
+- Cloudflare Pages: [frontend do Órbita em produção](https://orbita-milhas.pages.dev/), com publicação automática da branch `main` de `htceGit/orbita-milhas`. Configuração descrita em [CLOUDFLARE_PAGES.md](CLOUDFLARE_PAGES.md). O workflow legado do GitHub Pages é somente manual e exige que a hospedagem esteja habilitada no repositório.
 - Supabase: Auth, contas, preferências, favoritos, radares pessoais, dados recebidos e alertas Telegram.
 - Motor externo: escreve em `public.tarifaspromo` com chave de servidor. Seu código, agenda e implantação pertencem a outro projeto.
 
@@ -13,6 +13,8 @@ O workflow do coletor antigo foi desativado; as sessões restantes foram cancela
 A navegação é aberta, sem cadastro nem login. A migração `public_promotions_portal` permite SELECT de `tarifaspromo` aos papéis `anon` e `authenticated`, com RLS para tarifas positivas e partida atual/futura em Brasília. Visitantes e usuários autenticados não recebem escrita nessa tabela. O coletor mantém suas permissões de servidor. A view `vw_melhores_ofertas` continua com `security_invoker` e sem acesso anônimo, pois o frontend lê a tabela diretamente.
 
 A entrada `#admin`, acessível pelo rodapé, usa Supabase Auth. Somente perfis administrativos ativos podem carregar a administração. Recuperação de senha e contas existentes foram mantidas. Dados de perfis e configurações privadas não foram liberados junto com as tarifas. Suspender uma conta restringe suas operações privadas; o catálogo continua público.
+
+O Site URL do Supabase é `https://orbita-milhas.pages.dev/`. Os retornos autorizados incluem essa raiz, `https://orbita-milhas.pages.dev/#admin` e a raiz antiga do GitHub Pages. Não há liberação genérica de domínios Pages nem de prévias de branches.
 
 Favoritas da experiência pública ficam na chave local `orbita-public-saved`, separada da demonstração. Não há sincronização entre navegadores. Os antigos favoritos em `tarifaspromo_favorites` continuam isolados por usuário, com seus registros preservados. Os dados de preferências, radares e interesse Pro também foram preservados; essas funcionalidades não aparecem no novo portal.
 
