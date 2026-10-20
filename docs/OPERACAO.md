@@ -2,7 +2,7 @@
 
 ## Separação de responsabilidades
 
-- Cloudflare Pages: [frontend do Órbita em produção](https://orbita-milhas.pages.dev/), com publicação automática da branch `main` de `htceGit/orbita-milhas`. Configuração descrita em [CLOUDFLARE_PAGES.md](CLOUDFLARE_PAGES.md). O workflow legado do GitHub Pages é somente manual e exige que a hospedagem esteja habilitada no repositório.
+- Cloudflare Pages: [frontend do Órbita em produção](https://orbita-milhas.pages.dev/), com fonte `main` de `htceGit/orbita-milhas`. A primeira publicação foi concluída. A publicação contínua está habilitada, mas há um aviso de desconexão Git e o teste de push não disparou novo deploy; falta corrigir a integração após a confirmação de identidade exigida pelo GitHub. Configuração descrita em [CLOUDFLARE_PAGES.md](CLOUDFLARE_PAGES.md). O workflow legado do GitHub Pages é somente manual e exige que a hospedagem esteja habilitada no repositório.
 - Supabase: Auth, contas, preferências, favoritos, radares pessoais, dados recebidos e alertas Telegram.
 - Motor externo: escreve em `public.tarifaspromo` com chave de servidor. Seu código, agenda e implantação pertencem a outro projeto.
 

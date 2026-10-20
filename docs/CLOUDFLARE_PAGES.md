@@ -1,6 +1,8 @@
 # Publicar o Órbita no Cloudflare Pages pelo GitHub
 
-O projeto `orbita-milhas` está publicado em **https://orbita-milhas.pages.dev/**, conectado a `htceGit/orbita-milhas`, branch de produção `main`. Build, pasta `dist` e variável `SKIP_DEPENDENCY_INSTALL=1` estão configurados no Pages. Novos pushes para `main` disparam a publicação automática.
+O projeto `orbita-milhas` está publicado em **https://orbita-milhas.pages.dev/**, com fonte `htceGit/orbita-milhas`, branch de produção `main`. Build, pasta `dist` e variável `SKIP_DEPENDENCY_INSTALL=1` estão configurados no Pages.
+
+**Pendência da integração Git:** a primeira publicação foi concluída, mas o painel exibe “This project is disconnected from your Git account”. O push seguinte não iniciou outro deploy. A publicação automática está habilitada nas configurações, porém ainda precisa da correção do vínculo com o aplicativo Cloudflare Pages no GitHub e de um novo teste de push. O acesso às configurações do aplicativo está aguardando a confirmação de identidade por e-mail exigida pelo GitHub. Isso não interrompe o site publicado nem as atualizações de tarifas pelo Supabase. Não desinstale a integração sem avaliar os demais projetos que a utilizam.
 
 No Supabase, Site URL já é `https://orbita-milhas.pages.dev/`; a lista de retornos contém essa raiz e `https://orbita-milhas.pages.dev/#admin`, preservando também o endereço antigo do GitHub Pages. A leitura pública, filtros por mês, expansão de rotas e detalhes de tarifas reais foram conferidos no domínio novo, assim como HTTPS e os cabeçalhos de segurança/cache.
 
