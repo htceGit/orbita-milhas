@@ -1,6 +1,6 @@
 # Órbita · Portal de oportunidades internacionais
 
-Portal público de promoções em HTML/CSS/JavaScript, publicado no [GitHub Pages](https://htcegit.github.io/orbita-milhas/). Ofertas agrupadas por origem × destino, filtros com múltipla seleção, favoritas locais e compartilhamento de tarifas. Não há cadastro, login obrigatório ou divulgação de planos Pro na experiência pública. A entrada administrativa continua protegida pelo Supabase Auth.
+Portal público de promoções em HTML/CSS/JavaScript, preparado para Cloudflare Pages com integração GitHub. O [GitHub Pages](https://htcegit.github.io/orbita-milhas/) continua ativo durante a transição. Ofertas agrupadas por origem × destino, filtros com múltipla seleção, favoritas locais e compartilhamento de tarifas. Não há cadastro, login obrigatório ou divulgação de planos Pro na experiência pública. A entrada administrativa continua protegida pelo Supabase Auth.
 
 O coletor é um projeto externo operado pelo proprietário no Railway. **Este repositório não contém nem agenda pesquisas de voos.** Os únicos workflows ativos são verificação e publicação do portal.
 
@@ -28,6 +28,8 @@ O trigger coloca mensagens em uma fila privada, deduplica rota/datas/preço/comp
 
 ## Desenvolvimento
 
+Use Node.js 22, definido em `.node-version` para o Cloudflare Pages e o GitHub Actions.
+
 ```sh
 npm ci
 npm test
@@ -41,3 +43,9 @@ Demonstração: `http://127.0.0.1:4173/?demo=1`. Usa três datas fictícias por 
 Os testes de banco usam PGlite e doubles locais de Vault/pg_net/Cron, sem enviar mensagens. As migrações históricas são mantidas para reconstruir o esquema; as migrações finais retiram as tabelas e funções do coletor antigo e migram os alertas para a fonte externa.
 
 Consulte [docs/OPERACAO.md](docs/OPERACAO.md). O catálogo aberto não depende de envio de e-mail. SMTP próprio e domínio continuam como configurações opcionais futuras; não há venda de planos neste portal.
+
+## Publicação no Cloudflare Pages
+
+Siga [o guia de publicação pelo GitHub](docs/CLOUDFLARE_PAGES.md). Selecione `htceGit/orbita-milhas`, branch `main`, framework `None`, comando `npm ci --include=dev --no-audit --no-fund && npm run build`, saída `dist` e variável `SKIP_DEPENDENCY_INSTALL=1`. A raiz é a do repositório. O build usa a configuração pública já versionada; nenhuma chave secreta precisa ir para o Cloudflare.
+
+O build gera `_headers` com proteção contra incorporação em outros sites, restrições de recursos do navegador e cache de um ano só para JS/CSS com hash. O HTML é revalidado a cada uso. As rotas usam fragmentos (`#ofertas`, `#salvas`, `#admin`) e dispensam regras de reescrita. O domínio definitivo deverá ser autorizado no Supabase Auth depois do primeiro deploy. Banco, coletor e Telegram continuam nos ambientes atuais.

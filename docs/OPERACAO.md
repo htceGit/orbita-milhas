@@ -2,7 +2,7 @@
 
 ## Separação de responsabilidades
 
-- GitHub Pages: frontend do Órbita.
+- Cloudflare Pages: destino preparado para o frontend do Órbita; implantação pelo GitHub descrita em [CLOUDFLARE_PAGES.md](CLOUDFLARE_PAGES.md). GitHub Pages continua ativo durante a transição.
 - Supabase: Auth, contas, preferências, favoritos, radares pessoais, dados recebidos e alertas Telegram.
 - Motor externo: escreve em `public.tarifaspromo` com chave de servidor. Seu código, agenda e implantação pertencem a outro projeto.
 
@@ -40,4 +40,4 @@ Permanecem as tabelas usadas pelo portal: `profiles`, `preferences`, `monitors`,
 
 ## Experiência atual
 
-O portal é gratuito e aberto, sem apresentação de planos ou cadastro público. A publicação usa GitHub Pages. O acesso ao catálogo não depende de SMTP. A administração permanece autenticada e os alertas Telegram mantêm suas regras privadas.
+O portal é gratuito e aberto, sem apresentação de planos ou cadastro público. O mesmo build estático funciona no Cloudflare Pages e no GitHub Pages. O acesso ao catálogo não depende de SMTP. A administração permanece autenticada e os alertas Telegram mantêm suas regras privadas.

@@ -6,19 +6,24 @@ const url = process.env.PUBLIC_SUPABASE_URL ?? config.supabaseUrl ?? '';
 const key = process.env.PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? config.supabasePublishableKey ?? '';
 if (key && !key.startsWith('sb_publishable_')) throw new Error('Use uma chave pública sb_publishable_, nunca uma chave secreta.');
 if (url && !/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(url)) throw new Error('URL Supabase inválida.');
+if (Boolean(url) !== Boolean(key)) throw new Error('Configure a URL e a chave pública do Supabase juntas.');
+if (process.env.CF_PAGES === '1' && !url) throw new Error('O deploy no Cloudflare Pages exige o Supabase configurado; confira public-config.json ou as variáveis PUBLIC_SUPABASE_*.');
 await rm('dist', {recursive:true, force:true});
 await mkdir('dist', {recursive:true});
 await Promise.all(['index.html', 'styles.css', 'favicon.svg'].map(f => cp(`web/${f}`, `dist/${f}`)));
 await build({entryPoints:['web/app.js'], bundle:true, minify:true, sourcemap:false, outfile:'dist/app.js', format:'esm', target:['es2022'], define:{__SUPABASE_URL__:JSON.stringify(url), __SUPABASE_KEY__:JSON.stringify(key)}});
 // Asset URLs change with their content, avoiding stale browser/CDN JS or CSS.
 let html=await readFile('dist/index.html','utf8');
+let headers=await readFile('web/_headers','utf8');
 for(const name of ['app.js','styles.css']){
  const hash=createHash('sha256').update(await readFile(`dist/${name}`)).digest('hex').slice(0,12);
  const [base,extension]=name.split('.');
  const versioned=`${base}.${hash}.${extension}`;
  await rename(`dist/${name}`,`dist/${versioned}`);
  html=html.replace(`./${name}`,`./${versioned}`);
+ // Exact filenames avoid applying a long cache to HTML or unversioned files.
+ headers+=`\n/${versioned}\n  Cache-Control: public, max-age=31536000, immutable\n`;
 }
-await writeFile('dist/index.html',html);
+await Promise.all([writeFile('dist/index.html',html),writeFile('dist/_headers',headers)]);
 await writeFile('dist/.nojekyll','');
 console.log(`Build pronto em dist/ · ${url ? 'Supabase configurado' : 'modo demonstração, sem credenciais'}`);

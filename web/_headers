@@ -1,0 +1,15 @@
+# Pages applies these headers to static responses. The HTML also carries its CSP
+# so the same build keeps working on GitHub Pages and in a local preview.
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Content-Security-Policy: frame-ancestors 'none'
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
+
+# Revalidate the entry document; only fingerprinted assets get immutable caching.
+/
+  Cache-Control: public, max-age=0, must-revalidate
+
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate
